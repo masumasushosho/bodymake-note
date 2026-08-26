@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>痩せ体質完成ノート</title>
+<!-- LIFF SDK（LINE公式。開いた人が誰かを判別するために必須） -->
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  /* ===== 設定色（深緑1色アクセント。装飾色は増やさない） ===== */
+  :root{
+    --bg:#eef2ee;          /* 明るいグレーグリーン */
+    --card:#ffffff;        /* カード白 */
+    --ink:#22302a;         /* 濃いインク色 */
+    --sub:#6b7a72;         /* 補助文字 */
+    --line:#dfe6e0;        /* 罫線 */
+    --accent:#1f6b4d;      /* 深緑 */
+    --accent-weak:#e6f0ea; /* 深緑の薄い面 */
+    --danger:#b3261e;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",sans-serif;
+    font-size:17px;              /* 本文17px以上 */
+    line-height:1.6;
+    padding-bottom:150px;         /* 下部固定エリア分の余白 */
+    -webkit-text-size-adjust:100%;
+  }
+  .num{font-variant-numeric:tabular-nums;}   /* 数字の桁を揃える */
+
+  /* ===== ヘッダ ===== */
+  header{
+    position:sticky;top:0;z-index:5;
+    background:var(--accent);color:#fff;
+    padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));
+    font-size:18px;font-weight:700;letter-spacing:.02em;
+  }
+  header .hello{font-size:14px;font-weight:400;opacity:.9;margin-top:2px;}
+
+  main{padding:16px;max-width:640px;margin:0 auto;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px;}
+  .card h2{margin:0 0 12px;font-size:17px;}
+  .muted{color:var(--sub);}
+  .empty{color:var(--sub);text-align:center;padding:28px 8px;}
+
+  /* ===== 入力行 ===== */
+  .field{margin-bottom:16px;}
+  .field > label{display:block;font-size:16px;margin-bottom:6px;font-weight:600;}
+  .field .unit{color:var(--sub);font-size:15px;margin-left:6px;font-weight:400;}
+  input[type=text],input[type=number],input[type=date],textarea,select{
+    width:100%;font-size:17px;color:var(--ink);background:#fbfdfb;
+    border:1.5px solid var(--line);border-radius:12px;padding:14px;min-height:52px;
+  }
+  textarea{min-height:88px;resize:vertical;}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);}
+
+  /* 大きな選択ボタン（体調・運動・活動レベルなど） */
+  .choices{display:flex;gap:8px;flex-wrap:wrap;}
+  .choice{
+    flex:1 1 auto;min-width:52px;min-height:52px;
+    display:flex;align-items:center;justify-content:center;
+    border:1.5px solid var(--line);border-radius:12px;background:#fbfdfb;
+    font-size:17px;font-weight:600;cursor:pointer;user-select:none;padding:8px 10px;
+  }
+  .choice.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  /* 計算結果の表示ボックス */
+  .calc{background:var(--accent-weak);border-radius:12px;padding:12px 14px;margin-top:6px;}
+  .calc .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #cfe0d6;}
+  .calc .row:last-child{border-bottom:none;}
+  .calc .big{font-size:20px;font-weight:700;color:var(--accent);}
+
+  /* ===== 姿勢写真グリッド ===== */
+  .progress{font-size:22px;font-weight:700;text-align:center;margin:6px 0 14px;}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .slot{
+    position:relative;aspect-ratio:3/4;border:1.5px solid var(--line);border-radius:12px;
+    background:#f4f8f5;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;padding:4px;
+  }
+  .slot .no{position:absolute;top:4px;left:6px;font-size:13px;font-weight:700;color:var(--sub);}
+  .slot .cap{font-size:12px;color:var(--sub);line-height:1.3;}
+  .slot img{width:100%;height:100%;object-fit:cover;}
+  .slot.done{border-color:var(--accent);}
+  .slot .check{position:absolute;top:4px;right:6px;width:22px;height:22px;border-radius:50%;
+    background:var(--accent);color:#fff;font-size:14px;display:flex;align-items:center;justify-content:center;}
+
+  /* ===== 表（推移） ===== */
+  table{width:100%;border-collapse:collapse;font-size:16px;}
+  th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:right;}
+  th:first-child,td:first-child{text-align:left;}
+  thead th{color:var(--sub);font-weight:600;font-size:14px;}
+
+  /* ===== 下部固定：保存ボタン＋タブ ===== */
+  .dock{position:fixed;left:0;right:0;bottom:0;z-index:6;}
+  .savebar{padding:10px 16px;background:linear-gradient(to top,var(--bg),rgba(238,242,238,.0));}
+  .btn-save{
+    width:100%;max-width:608px;margin:0 auto;display:block;
+    background:var(--accent);color:#fff;border:none;border-radius:14px;
+    font-size:19px;font-weight:700;min-height:56px;cursor:pointer;box-shadow:0 4px 14px rgba(31,107,77,.25);
+  }
+  .btn-save:disabled{opacity:.5;}
+  .btn-sub{
+    width:100%;margin-top:10px;background:#fff;color:var(--accent);border:1.5px solid var(--accent);
+    border-radius:14px;font-size:17px;font-weight:700;min-height:52px;cursor:pointer;
+  }
+  .tabs{display:flex;background:#fff;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);}
+  .tab{flex:1;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;font-size:12px;color:var(--sub);cursor:pointer;background:none;border:none;}
+  .tab .ico{font-size:22px;line-height:1;}
+  .tab.on{color:var(--accent);font-weight:700;}
+
+  /* ===== トースト ===== */
+  .toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:#fff;padding:12px 20px;border-radius:30px;font-size:16px;
+    opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:10;max-width:90%;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* ===== 全画面ローディング ===== */
+  .loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:14px;z-index:20;}
+  .spinner{width:38px;height:38px;border:4px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+
+<!-- 起動中ローディング -->
+<div id="loading" class="loading">
+  <div class="spinner"></div>
+  <div class="muted">読み込んでいます…</div>
+</div>
+
+<header>
+  痩せ体質完成ノート
+  <div class="hello" id="hello"></div>
+</header>
+
+<main>
+  <!-- 画面1：今日の記録 -->
+  <section id="view-record" class="view"></section>
+  <!-- 画面2：姿勢写真 -->
+  <section id="view-photo" class="view hidden"></section>
+  <!-- 画面3：カルテ -->
+  <section id="view-karte" class="view hidden"></section>
+  <!-- 画面4：推移 -->
+  <section id="view-trend" class="view hidden"></section>
+</main>
+
+<!-- 下部固定：保存ボタン（画面ごとに出し分け）＋タブ -->
+<div class="dock">
+  <div id="savebar" class="savebar"></div>
+  <nav class="tabs">
+    <button class="tab on" data-view="record"><span class="ico">✏️</span>今日の記録</button>
+    <button class="tab" data-view="photo"><span class="ico">📷</span>姿勢写真</button>
+    <button class="tab" data-view="karte"><span class="ico">📋</span>カルテ</button>
+    <button class="tab" data-view="trend"><span class="ico">📈</span>推移</button>
+  </nav>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<!-- 写真選択用の隠しinput -->
+<input type="file" id="filePick" accept="image/*" class="hidden">
+<input type="file" id="fileMulti" accept="image/*" multiple class="hidden">
+
+<script>
+/* ================= 設定（増田さんが貼り替える2つ） ================= */
+var CONFIG = {
+  LIFF_ID: 'ここにLIFF_IDを貼る',                 // 例: 2000000000-abcd1234
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbz-YyCsJ2su_IviYAWogU92SrxAZ4Vne52mYFtQ29zp8f8dm3m8V3JJW5q7rDq8pXsr/exec'
+};
+
+/* ================= 共通状態 ================= */
+var S = { idToken:null, name:'', today:'', shootDates:[], round:1, karte:null };
+
+/* ================= サーバー通信 ================= */
+function api(action, payload){
+  var body = Object.assign({ action:action, idToken:S.idToken }, payload || {});
+  return fetch(CONFIG.GAS_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},  // プリフライトを避ける
+    body: JSON.stringify(body)
+  }).then(function(r){ return r.json(); }).then(function(res){
+    if(!res.ok) throw new Error(res.error || 'server error');
+    return res.data;
+  });
+}
+
+/* ================= 画面ユーティリティ ================= */
+function $(id){ return document.getElementById(id); }
+function toast(msg){
+  var t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t=setTimeout(function(){ t.classList.remove('show'); },1800);
+}
+function showView(name){
+  ['record','photo','karte','trend'].forEach(function(v){
+    $('view-'+v).classList.toggle('hidden', v!==name);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){
+    b.classList.toggle('on', b.dataset.view===name);
+  });
+  $('savebar').innerHTML='';
+  if(name==='record') renderRecordSave();
+  if(name==='karte') renderKarteSave();
+  if(name==='photo') renderPhotoSave();
+  window.scrollTo(0,0);
+}
+
+/* ================= 起動 ================= */
+function boot(){
+  if(!window.liff){ fail('つながりませんでした。もう一度開いてください'); return; }
+  liff.init({ liffId: CONFIG.LIFF_ID }).then(function(){
+    if(!liff.isLoggedIn()){ liff.login(); return; }
+    S.idToken = liff.getIDToken();
+    return api('bootstrap', {});
+  }).then(function(d){
+    if(!d) return;
+    S.name=d.name; S.today=d.today; S.shootDates=d.shootDates||[];
+    $('hello').textContent = d.name ? (d.name+' さん') : 'ようこそ';
+    renderRecord(d.todayDiary);
+    $('loading').classList.add('hidden');
+    setupTabs();
+    showView('record');
+  }).catch(function(e){
+    fail('読み込みに失敗しました。電波の良い場所でもう一度お試しください');
+  });
+}
+function fail(msg){
+  $('loading').innerHTML='<div class="empty">'+msg+'</div>';
+}
+function setupTabs(){
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){
+    b.addEventListener('click',function(){
+      var v=b.dataset.view;
+      if(v==='photo') loadPhotos(S.round);
+      if(v==='karte') loadKarte();
+      if(v==='trend') loadTrend();
+      showView(v);
+    });
+  });
+}
+
+/* ============================================================
+ * 画面1：今日の記録
+ * ============================================================ */
+var RECORD_FIELDS = [
+  {key:'体重', unit:'kg', step:'0.1', mode:'decimal'},
+  {key:'ウエスト', unit:'cm', step:'0.1', mode:'decimal'},
+  {key:'右もも', unit:'cm', step:'0.1', mode:'decimal'},
+  {key:'左もも', unit:'cm', step:'0.1', mode:'decimal'},
+  {key:'カテ1', unit:'g', step:'1', mode:'numeric'},
+  {key:'カテ2', unit:'g', step:'1', mode:'numeric'},
+  {key:'カテ3', unit:'g', step:'1', mode:'numeric'},
+  {key:'歩数', unit:'歩', step:'1', mode:'numeric'}
+];
+function renderRecord(diary){
+  diary = diary || {};
+  var html='<div class="card"><h2>今日の記録　<span class="muted num">'+S.today+'</span></h2>';
+  RECORD_FIELDS.forEach(function(f){
+    var v = diary[f.key]!=null ? diary[f.key] : '';
+    html+='<div class="field"><label>'+f.key+'<span class="unit">'+f.unit+'</span></label>'+
+      '<input type="number" inputmode="'+f.mode+'" step="'+f.step+'" id="rec_'+f.key+'" class="num" value="'+esc(v)+'"></div>';
+  });
+  // 体調 1〜5
+  html+='<div class="field"><label>体調（1〜5）</label><div class="choices" id="rec_体調">';
+  for(var i=1;i<=5;i++){ html+='<div class="choice" data-val="'+i+'">'+i+'</div>'; }
+  html+='</div></div>';
+  // 運動
+  html+='<div class="field"><label>運動</label><div class="choices" id="rec_運動">'+
+    '<div class="choice" data-val="した">した</div><div class="choice" data-val="していない">していない</div></div></div>';
+  // 気づき
+  html+='<div class="field"><label>その日の気づき</label>'+
+    '<textarea id="rec_気づき" placeholder="ひとことでもOKです">'+esc(diary['その日の気づき']||'')+'</textarea></div>';
+  html+='</div>';
+  $('view-record').innerHTML=html;
+
+  bindChoices('rec_体調', diary['体調']);
+  bindChoices('rec_運動', diary['運動']);
+}
+function bindChoices(groupId, current){
+  var g=$(groupId); if(!g) return;
+  Array.prototype.forEach.call(g.children,function(c){
+    if(String(c.dataset.val)===String(current)) c.classList.add('on');
+    c.addEventListener('click',function(){
+      Array.prototype.forEach.call(g.children,function(x){x.classList.remove('on');});
+      c.classList.add('on');
+    });
+  });
+}
+function renderRecordSave(){
+  $('savebar').innerHTML='<button class="btn-save" id="btnSaveRecord">保存する</button>';
+  $('btnSaveRecord').addEventListener('click', saveRecord);
+}
+function saveRecord(){
+  var btn=$('btnSaveRecord'); btn.disabled=true; btn.textContent='保存中…';
+  var data={ date:S.today };
+  RECORD_FIELDS.forEach(function(f){ data[f.key]=$('rec_'+f.key).value; });
+  data['体調']=selected('rec_体調');
+  data['運動']=selected('rec_運動');
+  data['その日の気づき']=$('rec_気づき').value;
+  api('saveDaily',{data:data}).then(function(){
+    toast('保存しました'); btn.disabled=false; btn.textContent='保存する';
+  }).catch(function(){
+    alert2('保存できませんでした。もう一度お試しください'); btn.disabled=false; btn.textContent='保存する';
+  });
+}
+function selected(groupId){
+  var on=$(groupId).querySelector('.choice.on'); return on?on.dataset.val:'';
+}
+
+/* ============================================================
+ * 画面3：カルテ
+ * ============================================================ */
+var KARTE_META = null;  // サーバーから受け取る fields
+function loadKarte(){
+  api('getKarte',{}).then(function(d){
+    S.karte=d; KARTE_META=d.fields; renderKarte(d);
+  }).catch(function(){ $('view-karte').innerHTML='<div class="card"><div class="empty">読み込めませんでした</div></div>'; });
+}
+function renderKarte(d){
+  var v=d.values||{};
+  var html='<div class="card"><h2>カルテ（プロフィール）</h2>';
+  d.fields.forEach(function(f){
+    var val=v[f.key]!=null?v[f.key]:'';
+    if(f.type==='sex'){
+      html+=fieldWrap(f.label, choicesHtml('k_'+f.key, ['男性','女性'], val));
+    }else if(f.type==='act'){
+      html+=fieldWrap(f.label,
+        choicesHtml('k_'+f.key, [['1.5','低い'],['1.7','中程度'],['1.9','高い']], val));
+    }else if(f.type==='date'){
+      html+='<div class="field"><label>'+f.label+'</label><input type="date" id="k_'+f.key+'" value="'+esc(val)+'"></div>';
+    }else if(f.type==='num'){
+      html+='<div class="field"><label>'+f.label+'</label><input type="number" inputmode="decimal" id="k_'+f.key+'" class="num" value="'+esc(val)+'"></div>';
+    }else{
+      var big=(f.key==='goal3m'||f.key==='doingSports'||f.key==='pastSports'||f.key==='pastDiet'||f.key==='history');
+      html+='<div class="field"><label>'+f.label+'</label>'+
+        (big?'<textarea id="k_'+f.key+'">'+esc(val)+'</textarea>':'<input type="text" id="k_'+f.key+'" value="'+esc(val)+'">')+'</div>';
+    }
+  });
+  html+='</div>';
+  // 自動計算表示
+  html+='<div class="card"><h2>自動で計算した数字</h2><div id="karteCalc"></div></div>';
+  $('view-karte').innerHTML=html;
+  d.fields.forEach(function(f){
+    if(f.type==='sex') bindChoices('k_'+f.key, v[f.key]);
+    if(f.type==='act') bindChoices('k_'+f.key, v[f.key]);
+  });
+  renderKarteCalc(d.calc);
+}
+function fieldWrap(label, inner){ return '<div class="field"><label>'+label+'</label>'+inner+'</div>'; }
+function choicesHtml(groupId, opts, current){
+  var h='<div class="choices" id="'+groupId+'">';
+  opts.forEach(function(o){
+    var val=Array.isArray(o)?o[0]:o, lab=Array.isArray(o)?o[1]:o;
+    h+='<div class="choice" data-val="'+val+'">'+lab+'</div>';
+  });
+  return h+'</div>';
+}
+function renderKarteCalc(c){
+  c=c||{};
+  var box=$('karteCalc'); if(!box) return;
+  if(c.age==null && c.bmr==null){ box.innerHTML='<div class="empty">生年月日や身長を入れて保存すると、ここに出ます</div>'; return; }
+  var h='<div class="calc">';
+  h+=calcRow('年齢', c.age!=null?c.age+' 歳':'—');
+  h+=calcRow('基礎代謝', c.bmr!=null?'<span class="big num">'+c.bmr+'</span> kcal':'—');
+  h+=calcRow('体重が減りもしないカロリー', c.maintain!=null?c.maintain+' kcal':'—');
+  h+=calcRow('目標の目安カロリー', c.target!=null?'<span class="big num">'+c.target+'</span> kcal':'—');
+  h+='</div>';
+  if(c.shootDates && c.shootDates.length){
+    h+='<div style="margin-top:12px"><label style="font-weight:600">写真を撮る日（13回）</label><div class="calc" style="margin-top:6px">';
+    c.shootDates.forEach(function(s){ h+='<div class="row"><span>'+s.round+'回目</span><span class="num">'+s.dateStr+'</span></div>'; });
+    h+='</div></div>';
+  }
+  box.innerHTML=h;
+}
+function calcRow(k,v){ return '<div class="row"><span>'+k+'</span><span>'+v+'</span></div>'; }
+
+function renderKarteSave(){
+  $('savebar').innerHTML='<button class="btn-save" id="btnSaveKarte">保存する</button>';
+  $('btnSaveKarte').addEventListener('click', saveKarte);
+}
+function saveKarte(){
+  if(!KARTE_META) return;
+  var btn=$('btnSaveKarte'); btn.disabled=true; btn.textContent='保存中…';
+  var data={};
+  KARTE_META.forEach(function(f){
+    if(f.type==='sex'||f.type==='act') data[f.key]=selected('k_'+f.key);
+    else data[f.key]=$('k_'+f.key).value;
+  });
+  api('saveKarte',{data:data}).then(function(d){
+    S.shootDates=(d.calc&&d.calc.shootDates)||S.shootDates;
+    renderKarteCalc(d.calc);
+    toast('保存しました'); btn.disabled=false; btn.textContent='保存する';
+  }).catch(function(){
+    alert2('保存できませんでした。もう一度お試しください'); btn.disabled=false; btn.textContent='保存する';
+  });
+}
+
+/* ============================================================
+ * 画面2：姿勢写真
+ * ============================================================ */
+var PHOTO_STATE={ slots:[], round:1 };
+function loadPhotos(round){
+  round=round||S.round||1;
+  api('getPhotos',{round:round}).then(function(d){
+    S.round=d.round; S.shootDates=d.shootDates||S.shootDates;
+    PHOTO_STATE={ slots:d.slots, round:d.round };
+    renderPhotos(d);
+  }).catch(function(){ $('view-photo').innerHTML='<div class="card"><div class="empty">読み込めませんでした</div></div>'; });
+}
+function renderPhotos(d){
+  var html='<div class="card">';
+  // 撮影回プルダウン
+  html+='<div class="field"><label>撮影回</label><select id="roundSel">';
+  var dates=S.shootDates.length?S.shootDates:defaultRounds();
+  dates.forEach(function(s){
+    html+='<option value="'+s.round+'"'+(s.round===d.round?' selected':'')+'>'+esc(s.label)+'</option>';
+  });
+  html+='</select></div>';
+  html+='<div class="progress num">'+d.count+' / '+d.total+' 枚</div>';
+  html+='<div class="grid" id="photoGrid"></div></div>';
+  $('view-photo').innerHTML=html;
+
+  var grid=$('photoGrid');
+  d.slots.forEach(function(s){
+    var el=document.createElement('div');
+    el.className='slot'+(s.filled?' done':'');
+    el.innerHTML='<span class="no">'+s.no+'</span>'+
+      (s.filled?'<span class="check">✓</span>':'')+
+      '<div class="cap">'+esc(s.pose)+'<br>'+esc(s.dir)+'</div>';
+    el.addEventListener('click',function(){ pickOne(s.no, el); });
+    grid.appendChild(el);
+  });
+  $('roundSel').addEventListener('change',function(){ loadPhotos(Number(this.value)); });
+}
+function defaultRounds(){
+  var a=[]; for(var i=1;i<=13;i++) a.push({round:i,label:i+'回目'}); return a;
+}
+function renderPhotoSave(){
+  $('savebar').innerHTML='<button class="btn-sub" id="btnMulti">アルバムからまとめて選ぶ</button>';
+  $('btnMulti').addEventListener('click',function(){ $('fileMulti').click(); });
+}
+
+/* 1枠タップ → 1枚選ぶ（撮影 or アルバム、OS標準UI） */
+var pickTarget=null;
+function pickOne(no, el){
+  pickTarget={no:no, el:el};
+  $('filePick').value='';
+  $('filePick').click();
+}
+$('filePick').addEventListener('change',function(){
+  var file=this.files[0]; if(!file||!pickTarget) return;
+  var t=pickTarget;
+  shrink(file).then(function(b64){
+    return uploadSlot(t.no, b64, t.el);
+  });
+});
+
+/* まとめ選択 → 空き枠へ番号順に流し込む */
+$('fileMulti').addEventListener('change',function(){
+  var files=Array.prototype.slice.call(this.files); if(!files.length) return;
+  var empties=PHOTO_STATE.slots.filter(function(s){return !s.filled;}).map(function(s){return s.no;});
+  if(!empties.length){ toast('空いている枠がありません'); return; }
+  var pairs=[]; for(var i=0;i<files.length && i<empties.length;i++){ pairs.push({file:files[i], no:empties[i]}); }
+  toast(pairs.length+'枚を取り込みます');
+  var chain=Promise.resolve();
+  pairs.forEach(function(p){
+    chain=chain.then(function(){
+      return shrink(p.file).then(function(b64){
+        var el=findSlotEl(p.no);
+        return uploadSlot(p.no, b64, el, true);
+      });
+    });
+  });
+  chain.then(function(){ toast('取り込みが終わりました'); });
+});
+function findSlotEl(no){
+  var grid=$('photoGrid'); if(!grid) return null;
+  return grid.children[no-1]||null;
+}
+
+/* 端末側で長辺1600px・JPEG0.8に縮小し base64 を返す（必須処理） */
+function shrink(file){
+  return new Promise(function(resolve,reject){
+    var img=new Image();
+    var reader=new FileReader();
+    reader.onload=function(){ img.src=reader.result; };
+    reader.onerror=reject;
+    img.onload=function(){
+      var max=1600, w=img.width, h=img.height;
+      if(w>h && w>max){ h=Math.round(h*max/w); w=max; }
+      else if(h>=w && h>max){ w=Math.round(w*max/h); h=max; }
+      var canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      var dataUrl=canvas.toDataURL('image/jpeg',0.8);
+      resolve({ dataUrl:dataUrl, base64:dataUrl.split(',')[1] });
+    };
+    img.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+function uploadSlot(no, b64, el, quiet){
+  if(el){ el.classList.add('uploading'); }
+  return api('uploadPhoto',{ round:PHOTO_STATE.round, no:no, imageBase64:b64.base64 }).then(function(){
+    // その場でサムネイル表示（端末が持っている画像を使う。ドライブは非公開のまま）
+    if(el){
+      el.classList.add('done');
+      el.innerHTML='<span class="no">'+no+'</span><span class="check">✓</span>'+
+        '<img src="'+b64.dataUrl+'" alt="">';
+      el.onclick=function(){ pickOne(no, el); };
+    }
+    var slot=PHOTO_STATE.slots.filter(function(s){return s.no===no;})[0];
+    if(slot) slot.filled=true;
+    updateProgress();
+    if(!quiet) toast('アップロードしました');
+  }).catch(function(){
+    if(el) el.classList.remove('uploading');
+    alert2('電波の良い場所でもう一度お試しください');
+  });
+}
+function updateProgress(){
+  var c=PHOTO_STATE.slots.filter(function(s){return s.filled;}).length;
+  var p=document.querySelector('.progress'); if(p) p.textContent=c+' / '+PHOTO_STATE.slots.length+' 枚';
+}
+
+/* ============================================================
+ * 画面4：推移
+ * ============================================================ */
+function loadTrend(){
+  api('getTrend',{}).then(function(d){ renderTrend(d); })
+    .catch(function(){ $('view-trend').innerHTML='<div class="card"><div class="empty">読み込めませんでした</div></div>'; });
+}
+function renderTrend(d){
+  var weeks=(d&&d.weeks)||[];
+  if(!weeks.length){ $('view-trend').innerHTML='<div class="card"><h2>推移</h2><div class="empty">記録が入ると、ここに出ます</div></div>'; return; }
+  var h='<div class="card"><h2>週ごとの平均</h2><table><thead><tr>'+
+    '<th>週</th><th>体重</th><th>ウエスト</th><th>歩数</th><th>体調</th></tr></thead><tbody>';
+  weeks.forEach(function(w){
+    h+='<tr><td>'+w.week+'週</td>'+
+      '<td class="num">'+fmt(w.weight)+'</td>'+
+      '<td class="num">'+fmt(w.waist)+'</td>'+
+      '<td class="num">'+fmt(w.steps)+'</td>'+
+      '<td class="num">'+fmt(w.cond)+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  $('view-trend').innerHTML=h;
+}
+function fmt(v){ return (v==='' || v==null)?'—':v; }
+
+/* ================= 汎用 ================= */
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function alert2(msg){ toast(msg); }
+
+/* 起動 */
+boot();
+</script>
+</body>
+</html>
