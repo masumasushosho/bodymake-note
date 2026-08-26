@@ -67,6 +67,13 @@
     font-size:17px;font-weight:600;cursor:pointer;user-select:none;padding:8px 10px;
   }
   .choice.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  /* 縦並びの選択（体調のように言葉が長いもの） */
+  .choices.vert{flex-direction:column;}
+  .choices.vert .choice{width:100%;justify-content:flex-start;gap:10px;padding:12px 14px;}
+  .choices.vert .choice .n{min-width:26px;font-size:15px;color:var(--sub);}
+  .choices.vert .choice.on .n{color:#fff;}
+  /* 入力欄の下に出す小さな注意書き */
+  .note{font-size:14px;color:var(--sub);line-height:1.5;margin-top:6px;}
 
   /* 計算結果の表示ボックス */
   .calc{background:var(--accent-weak);border-radius:12px;padding:12px 14px;margin-top:6px;}
@@ -77,6 +84,17 @@
   /* ===== 姿勢写真グリッド ===== */
   .progress{font-size:22px;font-weight:700;text-align:center;margin:6px 0 14px;}
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  /* ポーズ1つ＝1ブロック。右と左を横に2つ並べる（原本のシートと同じ並び） */
+  .pose-row{margin-bottom:16px;}
+  .pose-head{margin-bottom:6px;}
+  .pose-name{font-size:16px;font-weight:700;}
+  .pose-name .pno{color:var(--sub);font-weight:600;font-size:14px;margin-right:6px;}
+  .pose-tip{display:block;font-size:14px;color:var(--sub);line-height:1.5;margin-top:2px;}
+  .pair{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .pair.single{grid-template-columns:1fr;}
+  .slot .dir{font-size:15px;font-weight:700;color:var(--ink);}
+  /* お手本写真。画像が置かれていないときは onerror で消える */
+  .sample{display:block;width:100%;max-width:320px;margin:0 auto 8px;border-radius:10px;border:1px solid var(--line);}
   .slot{
     position:relative;aspect-ratio:3/4;border:1.5px solid var(--line);border-radius:12px;
     background:#f4f8f5;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;
@@ -126,6 +144,12 @@
   .spinner{width:38px;height:38px;border:4px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
   .hidden{display:none !important;}
+
+  /* ヘッダー右の設定ボタン（カルテはここから開く） */
+  header{position:relative;}
+  .gear{position:absolute;right:12px;top:50%;transform:translateY(-50%);
+    background:rgba(255,255,255,.18);border:none;color:#fff;font-size:20px;
+    width:44px;height:44px;border-radius:12px;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -139,6 +163,7 @@
 <header>
   痩せ体質完成ノート
   <div class="hello" id="hello"></div>
+  <button class="gear" id="btnKarte" title="カルテ">⚙</button>
 </header>
 
 <main>
@@ -158,7 +183,6 @@
   <nav class="tabs">
     <button class="tab on" data-view="record"><span class="ico">✏️</span>今日の記録</button>
     <button class="tab" data-view="photo"><span class="ico">📷</span>姿勢写真</button>
-    <button class="tab" data-view="karte"><span class="ico">📋</span>カルテ</button>
     <button class="tab" data-view="trend"><span class="ico">📈</span>推移</button>
   </nav>
 </div>
@@ -235,6 +259,7 @@ function fail(msg){
   $('loading').innerHTML='<div class="empty">'+msg+'</div>';
 }
 function setupTabs(){
+  $('btnKarte').addEventListener('click',function(){ loadKarte(); showView('karte'); });
   Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){
     b.addEventListener('click',function(){
       var v=b.dataset.view;
@@ -254,11 +279,19 @@ var RECORD_FIELDS = [
   {key:'ウエスト', unit:'cm', step:'0.1', mode:'decimal'},
   {key:'右もも', unit:'cm', step:'0.1', mode:'decimal'},
   {key:'左もも', unit:'cm', step:'0.1', mode:'decimal'},
-  {key:'カテ1', unit:'g', step:'1', mode:'numeric'},
-  {key:'カテ2', unit:'g', step:'1', mode:'numeric'},
-  {key:'カテ3', unit:'g', step:'1', mode:'numeric'},
   {key:'歩数', unit:'歩', step:'1', mode:'numeric'}
 ];
+/* カテ1〜3は量を数えず、3つから選ぶ。名前は栄養コンシェルジュの教材に合わせる
+   （シートの列名は原本どおり カテ1/カテ2/カテ3 のまま保存する） */
+var CATE_FIELDS = [
+  {key:'カテ1', label:'カテゴリー1　炭水化物'},
+  {key:'カテ2', label:'カテゴリー2　タンパク質'},
+  {key:'カテ3', label:'カテゴリー3　野菜'}
+];
+var CATE_KEYS = CATE_FIELDS.map(function(f){ return f.key; });
+var CATE_OPTS = ['少ない','適量','多すぎた'];
+/* 体調は数字だけだと分かりにくいので言葉をつける */
+var COND_OPTS = [['1','絶不調'],['2','不調'],['3','普通'],['4','好調'],['5','絶好調']];
 function renderRecord(diary){
   diary = diary || {};
   var html='<div class="card"><h2>今日の記録　<span class="muted num">'+S.today+'</span></h2>';
@@ -267,19 +300,29 @@ function renderRecord(diary){
     html+='<div class="field"><label>'+f.key+'<span class="unit">'+f.unit+'</span></label>'+
       '<input type="number" inputmode="'+f.mode+'" step="'+f.step+'" id="rec_'+f.key+'" class="num" value="'+esc(v)+'"></div>';
   });
-  // 体調 1〜5
-  html+='<div class="field"><label>体調（1〜5）</label><div class="choices" id="rec_体調">';
-  for(var i=1;i<=5;i++){ html+='<div class="choice" data-val="'+i+'">'+i+'</div>'; }
+  // カテ1〜3（少ない／適量／多すぎた）
+  CATE_FIELDS.forEach(function(f){
+    html+='<div class="field"><label>'+f.label+'</label><div class="choices" id="rec_'+f.key+'">';
+    CATE_OPTS.forEach(function(o){ html+='<div class="choice" data-val="'+o+'">'+o+'</div>'; });
+    html+='</div></div>';
+  });
+  // 体調（言葉つきの5段階。縦に並べて読みやすく）
+  html+='<div class="field"><label>体調</label><div class="choices vert" id="rec_体調">';
+  COND_OPTS.forEach(function(o){
+    html+='<div class="choice" data-val="'+o[0]+'"><span class="n">'+o[0]+'</span>'+o[1]+'</div>';
+  });
   html+='</div></div>';
   // 運動
   html+='<div class="field"><label>運動</label><div class="choices" id="rec_運動">'+
-    '<div class="choice" data-val="した">した</div><div class="choice" data-val="していない">していない</div></div></div>';
+    '<div class="choice" data-val="した">した</div><div class="choice" data-val="していない">していない</div></div>'+
+    '<div class="note">完全にゼロの日は作らないようにしましょう。1分のストレッチでも「した」でOKです</div></div>';
   // 気づき
   html+='<div class="field"><label>その日の気づき</label>'+
     '<textarea id="rec_気づき" placeholder="ひとことでもOKです">'+esc(diary['その日の気づき']||'')+'</textarea></div>';
   html+='</div>';
   $('view-record').innerHTML=html;
 
+  CATE_KEYS.forEach(function(k){ bindChoices('rec_'+k, diary[k]); });
   bindChoices('rec_体調', diary['体調']);
   bindChoices('rec_運動', diary['運動']);
 }
@@ -301,6 +344,7 @@ function saveRecord(){
   var btn=$('btnSaveRecord'); btn.disabled=true; btn.textContent='保存中…';
   var data={ date:S.today };
   RECORD_FIELDS.forEach(function(f){ data[f.key]=$('rec_'+f.key).value; });
+  CATE_KEYS.forEach(function(k){ data[k]=selected('rec_'+k); });
   data['体調']=selected('rec_体調');
   data['運動']=selected('rec_運動');
   data['その日の気づき']=$('rec_気づき').value;
@@ -332,7 +376,9 @@ function renderKarte(d){
       html+=fieldWrap(f.label, choicesHtml('k_'+f.key, ['男性','女性'], val));
     }else if(f.type==='act'){
       html+=fieldWrap(f.label,
-        choicesHtml('k_'+f.key, [['1.5','低い'],['1.7','中程度'],['1.9','高い']], val));
+        choicesHtml('k_'+f.key, ACT_OPTS, val, true)+
+        '<div class="note">デスクワークの方は、仕事以外でどれくらい歩くかで選んでください。'+
+        '迷ったら2を選んでOKです。あとから変えられます</div>');
     }else if(f.type==='date'){
       html+='<div class="field"><label>'+f.label+'</label><input type="date" id="k_'+f.key+'" value="'+esc(val)+'"></div>';
     }else if(f.type==='num'){
@@ -353,12 +399,20 @@ function renderKarte(d){
   });
   renderKarteCalc(d.calc);
 }
+/* 活動レベル。数字だけでは伝わらないので、原本のカルテと同じ言葉を添える */
+var ACT_OPTS = [
+  ['1.5', '1 低い',       'デスクワーク中心。通勤や買い物のほかは、ほとんど歩かない'],
+  ['1.7', '2 中程度',     'デスクワーク中心だけど、1日1時間くらいは歩く（通勤・買い物・散歩の合計でOK）'],
+  ['1.9', '3 高い',       '立ち仕事や力仕事、または週4回以上の運動習慣がある'],
+  ['2.12','4 非常に高い', '毎日きつめの運動をしている、または重い物を運ぶ仕事が中心']
+];
 function fieldWrap(label, inner){ return '<div class="field"><label>'+label+'</label>'+inner+'</div>'; }
-function choicesHtml(groupId, opts, current){
-  var h='<div class="choices" id="'+groupId+'">';
+function choicesHtml(groupId, opts, current, vert){
+  var h='<div class="choices'+(vert?' vert':'')+'" id="'+groupId+'">';
   opts.forEach(function(o){
-    var val=Array.isArray(o)?o[0]:o, lab=Array.isArray(o)?o[1]:o;
-    h+='<div class="choice" data-val="'+val+'">'+lab+'</div>';
+    var val=Array.isArray(o)?o[0]:o, lab=Array.isArray(o)?o[1]:o, sub=Array.isArray(o)?o[2]:'';
+    h+='<div class="choice" data-val="'+val+'">'+
+       '<span>'+lab+(sub?'<span class="pose-tip">'+sub+'</span>':'')+'</span></div>';
   });
   return h+'</div>';
 }
@@ -424,18 +478,36 @@ function renderPhotos(d){
   });
   html+='</select></div>';
   html+='<div class="progress num">'+d.count+' / '+d.total+' 枚</div>';
-  html+='<div class="grid" id="photoGrid"></div></div>';
+  html+='<div id="photoGrid"></div></div>';
   $('view-photo').innerHTML=html;
 
+  // 原本のシートと同じく、ポーズ1つにつき1ブロック。右と左を横に並べる
   var grid=$('photoGrid');
+  var groups=[], byName={};
   d.slots.forEach(function(s){
-    var el=document.createElement('div');
-    el.className='slot'+(s.filled?' done':'');
-    el.innerHTML='<span class="no">'+s.no+'</span>'+
-      (s.filled?'<span class="check">✓</span>':'')+
-      '<div class="cap">'+esc(s.pose)+'<br>'+esc(s.dir)+'</div>';
-    el.addEventListener('click',function(){ pickOne(s.no, el); });
-    grid.appendChild(el);
+    var key=s.group||s.pose;
+    if(!byName[key]){ byName[key]={name:key, tip:s.tip||'', sample:s.sample||'', first:s.no, items:[]}; groups.push(byName[key]); }
+    byName[key].items.push(s);
+  });
+  groups.forEach(function(g, gi){
+    var row=document.createElement('div');
+    row.className='pose-row';
+    var head='<div class="pose-head"><span class="pose-name"><span class="pno">'+(gi+1)+'</span>'+esc(g.name)+'</span>'+
+      (g.tip?'<span class="pose-tip">'+esc(g.tip)+'</span>':'')+'</div>'+
+      (g.sample?'<img class="sample" src="'+esc(g.sample)+'" alt="お手本" onerror="this.style.display=\'none\'">':'');
+    row.innerHTML=head+'<div class="pair'+(g.items.length===1?' single':'')+'"></div>';
+    var pair=row.querySelector('.pair');
+    g.items.forEach(function(s){
+      var el=document.createElement('div');
+      el.className='slot'+(s.filled?' done':'');
+      el.dataset.no=s.no;
+      el.innerHTML='<span class="no">'+s.no+'</span>'+
+        (s.filled?'<span class="check">✓</span>':'')+
+        '<div class="dir">'+esc(s.dir)+'</div>';
+      el.addEventListener('click',function(){ pickOne(s.no, el); });
+      pair.appendChild(el);
+    });
+    grid.appendChild(row);
   });
   $('roundSel').addEventListener('change',function(){ loadPhotos(Number(this.value)); });
 }
@@ -482,7 +554,7 @@ $('fileMulti').addEventListener('change',function(){
 });
 function findSlotEl(no){
   var grid=$('photoGrid'); if(!grid) return null;
-  return grid.children[no-1]||null;
+  return grid.querySelector('.slot[data-no="'+no+'"]');
 }
 
 /* 端末側で長辺1600px・JPEG0.8に縮小し base64 を返す（必須処理） */
