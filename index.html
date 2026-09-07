@@ -7,17 +7,21 @@
 <!-- LIFF SDK（LINE公式。開いた人が誰かを判別するために必須） -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
-  /* ===== 設定色（深緑1色アクセント。装飾色は増やさない） ===== */
+  /* ===== 設定色（ボディメイクプラスのロゴから取る） ===== */
   :root{
-    --bg:#eef2ee;          /* 明るいグレーグリーン */
-    --card:#ffffff;        /* カード白 */
-    --ink:#22302a;         /* 濃いインク色 */
-    --sub:#6b7a72;         /* 補助文字 */
-    --line:#dfe6e0;        /* 罫線 */
-    --accent:#1f6b4d;      /* 深緑 */
-    --accent-weak:#e6f0ea; /* 深緑の薄い面 */
+    --bg:#f4f9fd;          /* 下半身の水色を薄くしたもの */
+    --card:#ffffff;
+    --ink:#3a5578;         /* 体のラインの濃い青 */
+    --sub:#8399b5;         /* 補助文字 */
+    --line:#dce9f4;
+    --accent:#ec3b78;      /* リング右下のピンク */
+    --accent-weak:#fdeaf1; /* ピンクの薄い面 */
+    --sky:#aedcf5;         /* 下半身の水色 */
+    --head:linear-gradient(100deg,#f8a98a 0%,#ec3b78 78%);
     --danger:#b3261e;
     --radius:14px;
+    /* 4フェーズ（ロゴの水色→青→オレンジ→ピンクの流れ） */
+    --ph1:#7cc4e8; --ph2:#5b8fc7; --ph3:#f0996f; --ph4:#ec3b78;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;}
@@ -35,7 +39,7 @@
   /* ===== ヘッダ ===== */
   header{
     position:sticky;top:0;z-index:5;
-    background:var(--accent);color:#fff;
+    background:var(--head);color:#fff;
     padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));
     font-size:18px;font-weight:700;letter-spacing:.02em;
   }
@@ -150,6 +154,51 @@
   .gear{position:absolute;right:12px;top:50%;transform:translateY(-50%);
     background:rgba(255,255,255,.18);border:none;color:#fff;font-size:20px;
     width:44px;height:44px;border-radius:12px;cursor:pointer;}
+  /* ===== 宿題（リフォームEX） ===== */
+  .hw-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px;}
+  .hw-set{font-weight:700;font-size:18px;}
+  .hw-given{color:var(--sub);font-size:14px;}
+  .ex{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+      padding:14px;margin-bottom:14px;}
+  .ex-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .ex-id{font-size:13px;font-weight:700;color:#fff;background:var(--sub);
+         border-radius:20px;padding:3px 10px;letter-spacing:.03em;}
+  .ex-id.p1{background:var(--ph1);} .ex-id.p2{background:var(--ph2);}
+  .ex-id.p3{background:var(--ph3);} .ex-id.p4{background:var(--ph4);}
+  .ex-body{font-size:14px;color:var(--sub);}
+  .ex-reps{margin-left:auto;font-size:15px;font-weight:700;}
+  /* 写真は原本と同じく横1列。左から右の順に番号を振る */
+  .shots{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;}
+  .shot{position:relative;flex:0 0 auto;width:132px;}
+  .shot img{width:132px;height:132px;object-fit:cover;border-radius:10px;
+            border:1px solid var(--line);background:#fff;display:block;}
+  .shot .n{position:absolute;left:6px;top:6px;min-width:22px;height:22px;border-radius:11px;
+           background:rgba(58,85,120,.86);color:#fff;font-size:13px;font-weight:700;
+           display:flex;align-items:center;justify-content:center;padding:0 6px;}
+  .ex-how{margin-top:10px;font-size:16px;line-height:1.65;}
+  /* できたは曜日ごとに7つ */
+  .days{display:flex;gap:6px;margin-top:12px;}
+  .day{flex:1;min-width:0;border:1px solid var(--line);background:#fff;border-radius:10px;
+       padding:7px 0 6px;text-align:center;cursor:pointer;font-size:12px;color:var(--sub);
+       line-height:1.25;}
+  .day .d{font-size:11px;}
+  .day .m{font-size:18px;line-height:1.1;height:20px;}
+  .day.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;}
+  .day.today{border-color:var(--accent);border-width:2px;}
+  /* まっすー用 */
+  .pick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .pick select,.pick input{flex:1;min-width:120px;}
+  .stu{display:flex;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line);cursor:pointer;}
+  .stu .nm{font-weight:700;}
+  .stu .mt{margin-left:auto;font-size:13px;color:var(--sub);text-align:right;}
+  .row-ex{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line);}
+  .row-ex img{width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--line);}
+  .row-ex .tx{flex:1;min-width:0;font-size:14px;line-height:1.45;
+              display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .row-ex button{flex:0 0 auto;}
+  .mini{font-size:14px;padding:7px 12px;border-radius:9px;border:1px solid var(--accent);
+        background:#fff;color:var(--accent);font-weight:700;cursor:pointer;}
+  .mini.fill{background:var(--accent);color:#fff;}
 </style>
 </head>
 <body>
@@ -164,6 +213,7 @@
   痩せ体質完成ノート
   <div class="hello" id="hello"></div>
   <button class="gear" id="btnKarte" title="カルテ">⚙</button>
+  <button class="gear hidden" id="btnCoach" title="まっすー用" style="right:52px;">👥</button>
 </header>
 
 <main>
@@ -175,6 +225,10 @@
   <section id="view-karte" class="view hidden"></section>
   <!-- 画面4：推移 -->
   <section id="view-trend" class="view hidden"></section>
+
+  <section id="view-homework" class="view hidden"></section>
+
+  <section id="view-coach" class="view hidden"></section>
 </main>
 
 <!-- 下部固定：保存ボタン（画面ごとに出し分け）＋タブ -->
@@ -182,6 +236,7 @@
   <div id="savebar" class="savebar"></div>
   <nav class="tabs">
     <button class="tab on" data-view="record"><span class="ico">✏️</span>今日の記録</button>
+    <button class="tab" data-view="homework"><span class="ico">🏋️</span>宿題</button>
     <button class="tab" data-view="photo"><span class="ico">📷</span>姿勢写真</button>
     <button class="tab" data-view="trend"><span class="ico">📈</span>推移</button>
   </nav>
@@ -192,6 +247,7 @@
 <!-- 写真選択用の隠しinput -->
 <input type="file" id="filePick" accept="image/*" class="hidden">
 <input type="file" id="fileMulti" accept="image/*" multiple class="hidden">
+<input type="file" id="fileEx" accept="image/*" multiple class="hidden">
 
 <script>
 /* ================= 設定（増田さんが貼り替える2つ） ================= */
@@ -223,7 +279,7 @@ function toast(msg){
   clearTimeout(toast._t); toast._t=setTimeout(function(){ t.classList.remove('show'); },1800);
 }
 function showView(name){
-  ['record','photo','karte','trend'].forEach(function(v){
+  ['record','photo','karte','trend','homework','coach'].forEach(function(v){
     $('view-'+v).classList.toggle('hidden', v!==name);
   });
   Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){
@@ -245,7 +301,8 @@ function boot(){
     return api('bootstrap', {});
   }).then(function(d){
     if(!d) return;
-    S.name=d.name; S.today=d.today; S.shootDates=d.shootDates||[];
+    S.name=d.name; S.today=d.today; S.shootDates=d.shootDates||[]; S.isCoach=!!d.isCoach;
+    if(S.isCoach) $('btnCoach').classList.remove('hidden');
     $('hello').textContent = d.name ? (d.name+' さん') : 'ようこそ';
     renderRecord(d.todayDiary);
     $('loading').classList.add('hidden');
@@ -260,10 +317,12 @@ function fail(msg){
 }
 function setupTabs(){
   $('btnKarte').addEventListener('click',function(){ loadKarte(); showView('karte'); });
+  $('btnCoach').addEventListener('click',function(){ loadCoach(); showView('coach'); });
   Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){
     b.addEventListener('click',function(){
       var v=b.dataset.view;
       if(v==='photo') loadPhotos(S.round);
+      if(v==='homework') loadHomework();
       if(v==='karte') loadKarte();
       if(v==='trend') loadTrend();
       showView(v);
@@ -626,6 +685,271 @@ function renderTrend(d){
 function fmt(v){ return (v==='' || v==null)?'—':v; }
 
 /* ================= 汎用 ================= */
+
+/* ============================================================
+ * 画面4：宿題（リフォームEX）
+ *   写真は原本と同じ横1列。左から順に番号を振る
+ *   できたは曜日ごとに7つ（毎日やる種目にも週1の種目にも合う）
+ * ============================================================ */
+var WDAY = ['月','火','水','木','金','土','日'];
+var PH_NO = { '緩める':1, '伸ばす':2, '支える':3, '鍛える':4 };
+
+function loadHomework(){
+  $('view-homework').innerHTML='<div class="empty">読み込んでいます…</div>';
+  api('getHomework',{}).then(function(d){ S.hw=d; renderHomework(d); })
+    .catch(function(){ $('view-homework').innerHTML='<div class="empty">読み込めませんでした。電波の良い場所でもう一度お試しください</div>'; });
+}
+
+function renderHomework(d){
+  if(!d.items || !d.items.length){
+    $('view-homework').innerHTML='<div class="card"><h2>宿題</h2>'+
+      '<div class="empty">まだ宿題は出ていません<br>次のセッションで一緒に決めましょう！</div></div>';
+    return;
+  }
+  var h='<div class="card"><div class="hw-head">'+
+        '<span class="hw-set">'+esc(d.setName||'あなたの宿題')+'</span>'+
+        (d.given?'<span class="hw-given">'+esc(d.given)+' から</span>':'')+
+        '</div><div class="ex-body">'+d.items.length+'種目。やった日をタップしてください</div></div>';
+  d.items.forEach(function(x){ h+=exCard(x, d.week, d.done||{}); });
+  $('view-homework').innerHTML=h;
+  bindDays();
+}
+
+function exCard(x, week, done){
+  var p=PH_NO[x.phase]||0;
+  var h='<div class="ex">';
+  h+='<div class="ex-top"><span class="ex-id'+(p?' p'+p:'')+'">'+esc(x.id)+'</span>';
+  h+='<span class="ex-body">'+esc(x.phase||'')+(x.body?'／'+esc(x.body):'')+
+     (x.sub&&x.sub.length?' <span style="opacity:.75">+'+esc(x.sub.join('・'))+'</span>':'')+'</span>';
+  var r=[]; if(x.reps) r.push(x.reps); if(x.sets) r.push(x.sets);
+  if(r.length) h+='<span class="ex-reps">'+esc(r.join(' × '))+'</span>';
+  h+='</div>';
+  if(x.photos && x.photos.length){
+    h+='<div class="shots">';
+    x.photos.forEach(function(u,i){
+      h+='<div class="shot"><img src="'+esc(u)+'" loading="lazy" alt=""><span class="n">'+(i+1)+'</span></div>';
+    });
+    h+='</div>';
+  }
+  h+='<div class="ex-how">'+esc(x.how)+'</div><div class="days">';
+  week.forEach(function(day,i){
+    var on = done[day] && done[day][x.id];
+    h+='<button class="day'+(on?' on':'')+(day===S.today?' today':'')+'" data-ex="'+esc(x.id)+'" data-date="'+day+'">'+
+       '<div class="d">'+WDAY[i]+'</div><div class="m">'+(on?'✓':'')+'</div></button>';
+  });
+  h+='</div></div>';
+  return h;
+}
+
+function bindDays(){
+  Array.prototype.forEach.call(document.querySelectorAll('#view-homework .day'),function(b){
+    b.addEventListener('click',function(){
+      var on=!b.classList.contains('on');
+      b.classList.toggle('on',on);
+      b.querySelector('.m').textContent = on?'✓':'';
+      api('saveDone',{ data:{ date:b.dataset.date, exId:b.dataset.ex, done:on } })
+        .then(function(){ if(on) toast('できた！ その調子です'); })
+        .catch(function(){
+          b.classList.toggle('on',!on);
+          b.querySelector('.m').textContent = on?'':'✓';
+          toast('保存できませんでした');
+        });
+    });
+  });
+}
+
+/* ============================================================
+ * 画面5：まっすー用（宿題を出す／種目を足す）
+ * ============================================================ */
+function loadCoach(){
+  $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
+  api('coachHome',{}).then(function(d){ S.coach=d; renderCoachHome(); })
+    .catch(function(e){ $('view-coach').innerHTML='<div class="empty">'+esc(String(e.message||e))+'</div>'; });
+}
+
+function renderCoachHome(){
+  var d=S.coach;
+  var h='<div class="card"><h2>だれに出しますか</h2>';
+  if(!d.students.length) h+='<div class="empty">まだ受講生がいません</div>';
+  d.students.forEach(function(s){
+    h+='<div class="stu" data-line="'+esc(s.lineId)+'"><span class="nm">'+esc(s.name)+'</span>'+
+       '<span class="mt">'+(s.count?esc(s.setName||'')+'　'+s.count+'種目':'まだ出していない')+'</span></div>';
+  });
+  h+='</div><div class="card"><h2>種目を足す</h2>'+
+     '<div class="ex-body">新しい種目をEXマスターに登録します。写真は5枚まで</div>'+
+     '<button class="btn-sub" id="btnNewEx" style="margin-top:10px;">種目を新しく作る</button></div>';
+  $('view-coach').innerHTML=h;
+  Array.prototype.forEach.call(document.querySelectorAll('#view-coach .stu'),function(b){
+    b.addEventListener('click',function(){ openStudent(b.dataset.line); });
+  });
+  $('btnNewEx').addEventListener('click', renderNewEx);
+  window.scrollTo(0,0);
+}
+
+function openStudent(lineId){
+  $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
+  api('coachOpen',{data:{lineId:lineId}}).then(function(d){
+    S.target=d; S.sel=d.items.map(function(x){return x.id;}); S.selInfo={};
+    d.items.forEach(function(x){ S.selInfo[x.id]=x; });
+    renderAssign();
+  }).catch(function(){ toast('開けませんでした'); renderCoachHome(); });
+}
+
+function renderAssign(){
+  var d=S.target, c=S.coach;
+  var me=(c.students.filter(function(s){return s.lineId===d.lineId;})[0]||{});
+  var h='<div class="card"><div class="hw-head"><span class="hw-set">'+esc(me.name||'')+'</span>'+
+        '<span class="hw-given">いま '+S.sel.length+' 種目</span></div>'+
+        '<button class="mini" id="btnBack">← 一覧へもどる</button></div>';
+
+  h+='<div class="card"><h2>セットから出す</h2><div class="pick">'+
+     '<select id="setSel"><option value="">選んでください</option>';
+  c.sets.forEach(function(x){
+    h+='<option value="'+esc(x.name)+'"'+(x.name===d.setName?' selected':'')+'>'+esc(x.name)+'（'+x.count+'種目）</option>';
+  });
+  h+='</select><button class="mini fill" id="btnSet">入れる</button></div>'+
+     '<div class="ex-body">セットを入れると、いまの中身がまるごと置きかわります</div></div>';
+
+  h+='<div class="card"><h2>1種目ずつ足す</h2><div class="pick">'+
+     '<select id="fPhase"><option value="">フェーズすべて</option>';
+  c.phases.forEach(function(x){ h+='<option>'+esc(x)+'</option>'; });
+  h+='</select><select id="fBody"><option value="">部位すべて</option>';
+  c.bodies.forEach(function(x){ h+='<option>'+esc(x)+'</option>'; });
+  h+='</select></div><div class="pick">'+
+     '<input type="text" id="fQ" placeholder="言葉でさがす"><button class="mini fill" id="btnFind">さがす</button></div>'+
+     '<div class="ex-body">部位はメインとサブの両方から探します</div><div id="found"></div></div>';
+
+  h+='<div class="card"><h2>出す内容</h2><div id="selList"></div>'+
+     '<button class="btn-save" id="btnAssign" style="margin-top:12px;">この内容で出す</button></div>';
+  $('view-coach').innerHTML=h;
+  renderSel();
+  $('btnBack').addEventListener('click', renderCoachHome);
+  $('btnSet').addEventListener('click',function(){
+    var n=$('setSel').value;
+    if(!n){ toast('セットを選んでください'); return; }
+    api('coachAssign',{data:{lineId:d.lineId,setName:n}})
+      .then(function(r){ toast(r.count+'種目 入れました'); openStudent(d.lineId); })
+      .catch(function(){ toast('入れられませんでした'); });
+  });
+  $('btnFind').addEventListener('click', doFind);
+  $('btnAssign').addEventListener('click',function(){
+    api('coachAssign',{data:{lineId:d.lineId, exIds:S.sel, setName:$('setSel').value||d.setName}})
+      .then(function(r){ toast(r.count+'種目 出しました！'); })
+      .catch(function(){ toast('保存できませんでした'); });
+  });
+  window.scrollTo(0,0);
+}
+
+function renderSel(){
+  var h = S.sel.length ? '' : '<div class="empty">まだ何も入っていません</div>';
+  S.sel.forEach(function(id){
+    var x=S.selInfo[id]||{id:id,how:'',photos:[]};
+    h+='<div class="row-ex">'+((x.photos&&x.photos.length)?'<img src="'+esc(x.photos[0])+'" loading="lazy" alt="">':'')+
+       '<div class="tx"><b>'+esc(id)+'</b>　'+esc(x.how||'')+'</div>'+
+       '<button class="mini" data-del="'+esc(id)+'">外す</button></div>';
+  });
+  $('selList').innerHTML=h;
+  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-del]'),function(b){
+    b.addEventListener('click',function(){
+      S.sel=S.sel.filter(function(x){return x!==b.dataset.del;});
+      renderSel();
+    });
+  });
+}
+
+function doFind(){
+  $('found').innerHTML='<div class="empty">さがしています…</div>';
+  api('coachSearch',{data:{phase:$('fPhase').value, body:$('fBody').value, q:$('fQ').value}}).then(function(r){
+    var h = r.total ? '<div class="ex-body" style="margin-top:8px;">'+r.total+'件みつかりました（'+r.items.length+'件まで表示）</div>'
+                    : '<div class="empty">見つかりませんでした</div>';
+    r.items.forEach(function(x){
+      S.selInfo[x.id]=x;
+      h+='<div class="row-ex">'+(x.photos.length?'<img src="'+esc(x.photos[0])+'" loading="lazy" alt="">':'')+
+         '<div class="tx"><b>'+esc(x.id)+'</b>　'+esc(x.how)+'</div>'+
+         '<button class="mini fill" data-add="'+esc(x.id)+'">足す</button></div>';
+    });
+    $('found').innerHTML=h;
+    Array.prototype.forEach.call(document.querySelectorAll('#found [data-add]'),function(b){
+      b.addEventListener('click',function(){
+        if(S.sel.indexOf(b.dataset.add)<0){ S.sel.push(b.dataset.add); renderSel(); toast('足しました'); }
+        else toast('もう入っています');
+      });
+    });
+  }).catch(function(){ $('found').innerHTML='<div class="empty">さがせませんでした</div>'; });
+}
+
+/* --- 種目を新しく作る --- */
+function renderNewEx(){
+  var c=S.coach;
+  S.newPhotos=[];
+  var h='<div class="card"><div class="hw-head"><span class="hw-set">種目を新しく作る</span></div>'+
+        '<button class="mini" id="btnBack2">← もどる</button></div><div class="card">'+
+     '<div class="field"><label>写真（5枚まで。左から順に1、2、3…になります）</label>'+
+     '<button class="btn-sub" id="btnPickEx">写真を選ぶ</button>'+
+     '<div class="shots" id="newShots" style="margin-top:10px;"></div></div>'+
+     '<div class="field"><label>やり方</label>'+
+     '<textarea id="nHow" placeholder="動きの手順を書いてください"></textarea></div>'+
+     '<div class="pick"><input type="text" id="nReps" placeholder="回数（例 10回）">'+
+     '<input type="text" id="nSets" placeholder="セット数（例 2セット）"></div>'+
+     '<div class="field"><label>フェーズ</label><select id="nPhase"><option value="">選んでください</option>';
+  c.phases.forEach(function(x){ h+='<option>'+esc(x)+'</option>'; });
+  h+='</select></div><div class="field"><label>部位（メイン）</label><select id="nBody"><option value="">選んでください</option>';
+  c.bodies.forEach(function(x){ h+='<option>'+esc(x)+'</option>'; });
+  h+='</select></div><div class="field"><label>部位（サブ。効いている所を3つまで）</label><div class="pick">';
+  ['nSub1','nSub2','nSub3'].forEach(function(id){
+    h+='<select id="'+id+'"><option value="">なし</option>';
+    c.bodies.forEach(function(x){ h+='<option>'+esc(x)+'</option>'; });
+    h+='</select>';
+  });
+  h+='</div></div><button class="btn-save" id="btnSaveEx" style="margin-top:12px;">この種目を登録する</button></div>';
+  $('view-coach').innerHTML=h;
+  $('btnBack2').addEventListener('click', renderCoachHome);
+  $('btnPickEx').addEventListener('click',function(){ $('fileEx').click(); });
+  $('btnSaveEx').addEventListener('click', saveNewEx);
+  window.scrollTo(0,0);
+}
+
+$('fileEx').addEventListener('change',function(){
+  var files=Array.prototype.slice.call(this.files); if(!files.length) return;
+  var room=5-(S.newPhotos||[]).length;
+  if(room<=0){ toast('写真は5枚までです'); return; }
+  var chain=Promise.resolve();
+  files.slice(0,room).forEach(function(f){
+    chain=chain.then(function(){
+      return shrink(f).then(function(b){ S.newPhotos.push(b); drawNewShots(); });
+    });
+  });
+  this.value='';
+});
+
+function drawNewShots(){
+  var h='';
+  (S.newPhotos||[]).forEach(function(b,i){
+    h+='<div class="shot"><img src="'+b.dataUrl+'" alt=""><span class="n">'+(i+1)+'</span></div>';
+  });
+  var el=$('newShots'); if(el) el.innerHTML=h;
+}
+
+function saveNewEx(){
+  var how=$('nHow').value.trim();
+  if(how.length<4){ toast('やり方を書いてください'); return; }
+  var sub=['nSub1','nSub2','nSub3'].map(function(id){ return $(id).value; })
+          .filter(function(x){ return x; });
+  $('btnSaveEx').disabled=true;
+  toast('登録しています…');
+  api('coachAddEx',{data:{
+    how:how, reps:$('nReps').value, sets:$('nSets').value,
+    phase:$('nPhase').value, body:$('nBody').value, sub:sub,
+    photos:(S.newPhotos||[]).map(function(b){ return b.base64; })
+  }}).then(function(r){
+    toast(r.id+' で登録しました');
+    renderCoachHome();
+  }).catch(function(e){
+    $('btnSaveEx').disabled=false;
+    toast(String(e.message||'登録できませんでした'));
+  });
+}
+
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function alert2(msg){ toast(msg); }
 
