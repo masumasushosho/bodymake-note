@@ -154,6 +154,14 @@
   .gear{position:absolute;right:12px;top:50%;transform:translateY(-50%);
     background:rgba(255,255,255,.18);border:none;color:#fff;font-size:20px;
     width:44px;height:44px;border-radius:12px;cursor:pointer;}
+  /* ===== 朝と夜の切り替え ===== */
+  .partsw{display:flex;gap:6px;margin-bottom:12px;}
+  .partsw button{flex:1;padding:10px 0;border-radius:10px;border:1px solid var(--line);
+                 background:#fff;color:var(--sub);font-size:15px;font-weight:700;cursor:pointer;}
+  .partsw button.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .tip{background:var(--accent-weak);border-radius:10px;padding:10px 12px;margin-bottom:14px;
+       font-size:14px;line-height:1.6;}
+
   /* ===== 宿題（リフォームEX） ===== */
   .hw-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px;}
   .hw-set{font-weight:700;font-size:18px;}
@@ -302,6 +310,7 @@ function boot(){
   }).then(function(d){
     if(!d) return;
     S.name=d.name; S.today=d.today; S.shootDates=d.shootDates||[]; S.isCoach=!!d.isCoach;
+    S.hw=d.homework||null;
     if(S.isCoach) $('btnCoach').classList.remove('hidden');
     $('hello').textContent = d.name ? (d.name+' さん') : 'ようこそ';
     renderRecord(d.todayDiary);
@@ -333,6 +342,27 @@ function setupTabs(){
 /* ============================================================
  * 画面1：今日の記録
  * ============================================================ */
+/* 朝に書くもの／夜に書くもの。ここを直せば振り分けが変わる
+   朝 … 起きてすぐ測るもの（夜に測ると数字がブレる）
+   夜 … 1日が終わらないと決まらないもの */
+var PART_AM = ['体重','ウエスト','右もも','左もも','歩数','体調'];
+var PART_PM = ['カテ1','カテ2','カテ3','運動','その日の気づき'];
+var PART_LABEL = { am:'朝', pm:'夜', all:'ぜんぶ' };
+
+/* いま朝の画面か夜の画面か。URLの ?t=am / ?t=pm が最優先、無ければ時刻で決める */
+function currentPart(){
+  if (S.part) return S.part;
+  var q = (location.search.match(/[?&]t=(am|pm|all)/) || [])[1];
+  if (q) return q;
+  var h = new Date().getHours();
+  return (h >= 4 && h < 12) ? 'am' : 'pm';
+}
+function inPart(key){
+  var p = currentPart();
+  if (p === 'all') return true;
+  return (p === 'am' ? PART_AM : PART_PM).indexOf(key) >= 0;
+}
+
 var RECORD_FIELDS = [
   {key:'体重', unit:'kg', step:'0.1', mode:'decimal'},
   {key:'ウエスト', unit:'cm', step:'0.1', mode:'decimal'},
@@ -353,37 +383,70 @@ var CATE_OPTS = ['少ない','適量','多すぎた'];
 var COND_OPTS = [['1','絶不調'],['2','不調'],['3','普通'],['4','好調'],['5','絶好調']];
 function renderRecord(diary){
   diary = diary || {};
-  var html='<div class="card"><h2>今日の記録　<span class="muted num">'+S.today+'</span></h2>';
+  S.diary = diary;
+  var part = currentPart();
+
+  var html='<div class="partsw">';
+  ['am','pm','all'].forEach(function(p){
+    html+='<button data-p="'+p+'"'+(p===part?' class="on"':'')+'>'+PART_LABEL[p]+'</button>';
+  });
+  html+='</div>';
+
+  html+='<div class="card"><h2>今日の記録　<span class="muted num">'+S.today+'</span></h2>';
+  if(part==='am'){
+    html+='<div class="tip">体重とサイズは、起きてトイレを済ませたあと、朝ごはんの前に測りましょう。'+
+          '夜に測ると水分や食事の分で数字がブレます</div>';
+  }
+  if(part==='pm'){
+    html+='<div class="tip">1日おつかれさまでした。今日できたことを、ひとつでも書き残しておきましょう</div>';
+  }
+
   RECORD_FIELDS.forEach(function(f){
+    if(!inPart(f.key)) return;
     var v = diary[f.key]!=null ? diary[f.key] : '';
     html+='<div class="field"><label>'+f.key+'<span class="unit">'+f.unit+'</span></label>'+
       '<input type="number" inputmode="'+f.mode+'" step="'+f.step+'" id="rec_'+f.key+'" class="num" value="'+esc(v)+'"></div>';
   });
   // カテ1〜3（少ない／適量／多すぎた）
   CATE_FIELDS.forEach(function(f){
+    if(!inPart(f.key)) return;
     html+='<div class="field"><label>'+f.label+'</label><div class="choices" id="rec_'+f.key+'">';
     CATE_OPTS.forEach(function(o){ html+='<div class="choice" data-val="'+o+'">'+o+'</div>'; });
     html+='</div></div>';
   });
   // 体調（言葉つきの5段階。縦に並べて読みやすく）
-  html+='<div class="field"><label>体調</label><div class="choices vert" id="rec_体調">';
-  COND_OPTS.forEach(function(o){
-    html+='<div class="choice" data-val="'+o[0]+'"><span class="n">'+o[0]+'</span>'+o[1]+'</div>';
-  });
-  html+='</div></div>';
+  if(inPart('体調')){
+    html+='<div class="field"><label>体調</label><div class="choices vert" id="rec_体調">';
+    COND_OPTS.forEach(function(o){
+      html+='<div class="choice" data-val="'+o[0]+'"><span class="n">'+o[0]+'</span>'+o[1]+'</div>';
+    });
+    html+='</div></div>';
+  }
   // 運動
-  html+='<div class="field"><label>運動</label><div class="choices" id="rec_運動">'+
-    '<div class="choice" data-val="した">した</div><div class="choice" data-val="していない">していない</div></div>'+
-    '<div class="note">完全にゼロの日は作らないようにしましょう。1分のストレッチでも「した」でOKです</div></div>';
+  if(inPart('運動')){
+    html+='<div class="field"><label>運動</label><div class="choices" id="rec_運動">'+
+      '<div class="choice" data-val="した">した</div><div class="choice" data-val="していない">していない</div></div>'+
+      '<div class="note">完全にゼロの日は作らないようにしましょう。1分のストレッチでも「した」でOKです</div></div>';
+  }
   // 気づき
-  html+='<div class="field"><label>その日の気づき</label>'+
-    '<textarea id="rec_気づき" placeholder="ひとことでもOKです">'+esc(diary['その日の気づき']||'')+'</textarea></div>';
+  if(inPart('その日の気づき')){
+    html+='<div class="field"><label>その日の気づき</label>'+
+      '<textarea id="rec_気づき" placeholder="ひとことでもOKです">'+esc(diary['その日の気づき']||'')+'</textarea></div>';
+  }
   html+='</div>';
   $('view-record').innerHTML=html;
 
-  CATE_KEYS.forEach(function(k){ bindChoices('rec_'+k, diary[k]); });
-  bindChoices('rec_体調', diary['体調']);
-  bindChoices('rec_運動', diary['運動']);
+  CATE_KEYS.forEach(function(k){ if(inPart(k)) bindChoices('rec_'+k, diary[k]); });
+  if(inPart('体調')) bindChoices('rec_体調', diary['体調']);
+  if(inPart('運動')) bindChoices('rec_運動', diary['運動']);
+
+  Array.prototype.forEach.call(document.querySelectorAll('.partsw button'),function(b){
+    b.addEventListener('click',function(){
+      S.part = b.dataset.p;
+      renderRecord(S.diary);
+      renderRecordSave();
+    });
+  });
 }
 function bindChoices(groupId, current){
   var g=$(groupId); if(!g) return;
@@ -402,11 +465,11 @@ function renderRecordSave(){
 function saveRecord(){
   var btn=$('btnSaveRecord'); btn.disabled=true; btn.textContent='保存中…';
   var data={ date:S.today };
-  RECORD_FIELDS.forEach(function(f){ data[f.key]=$('rec_'+f.key).value; });
-  CATE_KEYS.forEach(function(k){ data[k]=selected('rec_'+k); });
-  data['体調']=selected('rec_体調');
-  data['運動']=selected('rec_運動');
-  data['その日の気づき']=$('rec_気づき').value;
+  RECORD_FIELDS.forEach(function(f){ if($('rec_'+f.key)) data[f.key]=$('rec_'+f.key).value; });
+  CATE_KEYS.forEach(function(k){ if($('rec_'+k)) data[k]=selected('rec_'+k); });
+  if($('rec_体調')) data['体調']=selected('rec_体調');
+  if($('rec_運動')) data['運動']=selected('rec_運動');
+  if($('rec_気づき')) data['その日の気づき']=$('rec_気づき').value;
   api('saveDaily',{data:data}).then(function(){
     toast('保存しました'); btn.disabled=false; btn.textContent='保存する';
   }).catch(function(){
@@ -694,7 +757,8 @@ function fmt(v){ return (v==='' || v==null)?'—':v; }
 var WDAY = ['月','火','水','木','金','土','日'];
 var PH_NO = { '緩める':1, '伸ばす':2, '支える':3, '鍛える':4 };
 
-function loadHomework(){
+function loadHomework(force){
+  if(!force && S.hw){ renderHomework(S.hw); return; }   // 起動時に受け取ったぶんを使う
   $('view-homework').innerHTML='<div class="empty">読み込んでいます…</div>';
   api('getHomework',{}).then(function(d){ S.hw=d; renderHomework(d); })
     .catch(function(){ $('view-homework').innerHTML='<div class="empty">読み込めませんでした。電波の良い場所でもう一度お試しください</div>'; });
