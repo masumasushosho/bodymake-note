@@ -195,8 +195,16 @@
   .ex-tips{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:14px;line-height:1.6;
            background:var(--accent-weak);color:var(--ink);white-space:pre-wrap;}
   .ex-tips b{color:var(--accent);}
-  /* できたは曜日ごとに7つ */
+  /* 今日のメニューの切り替え（メニューが2つ以上ある人だけ出る） */
+  .mnav{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+  .mn{flex:0 0 auto;min-width:42px;height:38px;padding:0 10px;border:1px solid var(--line);
+      background:#fff;border-radius:10px;font-size:15px;font-weight:700;color:var(--sub);cursor:pointer;}
+  .mn.td{border-color:var(--accent);border-width:2px;}
+  .mn.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  /* できたは1種目に1つ */
   .days{display:flex;gap:6px;margin-top:12px;}
+  .days.one .day{padding:11px 0 10px;}
+  .days.one .day .d{font-size:14px;}
   .day{flex:1;min-width:0;border:1px solid var(--line);background:#fff;border-radius:10px;
        padding:7px 0 6px;text-align:center;cursor:pointer;font-size:12px;color:var(--sub);
        line-height:1.25;}
@@ -219,7 +227,21 @@
         background:#fff;color:var(--accent);font-weight:700;cursor:pointer;}
   .mini.fill{background:var(--accent);color:#fff;}
 
-  /* 並べかえ用の上下ボタン */
+  /* 並べかえは、つまみを押したまま動かす */
+  .grip{flex:0 0 auto;width:34px;height:40px;padding:0;font-size:17px;line-height:1;
+        border:1px solid var(--line);background:#fff;color:var(--sub);border-radius:7px;
+        cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;}
+  .exrow.dragging{opacity:.55;pointer-events:none;}
+  .exrow.dragging .row-ex{background:var(--accent-weak);border-radius:8px;}
+  /* メニューのかたまり（A・B・C・D） */
+  .mblock{border:1px solid var(--line);border-radius:12px;padding:10px 10px 12px;margin-bottom:14px;}
+  .mblock.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
+  .mhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
+  .mhead .mt{font-weight:700;font-size:15px;flex:0 0 auto;}
+  .mhead .mname{flex:1;min-width:110px;padding:6px 8px;font-size:14px;}
+  .mhead .mc{font-size:13px;color:var(--sub);flex:0 0 auto;}
+  .mbox{min-height:8px;}
+  /* 並べかえ用の上下ボタン（いまは使っていない） */
   .ord{display:flex;flex-direction:column;gap:3px;flex:0 0 auto;}
   .ord button{width:34px;height:25px;padding:0;font-size:13px;line-height:1;border-radius:7px;
               border:1px solid var(--line);background:#fff;color:var(--sub);font-weight:700;cursor:pointer;}
@@ -866,14 +888,15 @@ function fmt(v){ return (v==='' || v==null)?'—':v; }
 /* ============================================================
  * 画面4：宿題（リフォームEX）
  *   写真は原本と同じ横1列。左から順に番号を振る
- *   できたは曜日ごとに7つ（毎日やる種目にも週1の種目にも合う）
+ *   メニューが複数ある人は、今日のぶんだけ出す（A→B→C→D→A… の順ぐり）
+ *   できたは1種目に1つ。下の「のこりも、できた」でまとめて押せる
  * ============================================================ */
 var WDAY = ['月','火','水','木','金','土','日'];
 var PH_NO = { '緩める':1, '伸ばす':2, '支える':3, '鍛える':4 };
 
 /* 前に見た宿題を端末に覚えておく。次に開いたとき、待たずに出すため。
  * あくまで見た目を先に出すだけで、すぐ裏で新しいものを取りにいって置きかえる */
-var HW_KEY = 'bm_hw_v1';
+var HW_KEY = 'bm_hw_v2';
 function hwCacheRead(){
   try{
     var s = localStorage.getItem(HW_KEY);
@@ -904,13 +927,41 @@ function renderHomework(d){
       '<div class="empty">まだ宿題は出ていません<br>次のセッションで一緒に決めましょう！</div></div>';
     return;
   }
+  var byId={}; d.items.forEach(function(x){ byId[x.id]=x; });
+  var menus=(d.menus&&d.menus.length)?d.menus:[{no:1, ids:d.items.map(function(x){return x.id;})}];
+  var todayNo=d.todayNo||1;
+  var no=S.hwNo||todayNo;
+  if(no<1 || no>menus.length) no=todayNo<=menus.length?todayNo:1;
+  S.hwNo=no;
+
+  var today=d.today||S.today;
+  var doneToday=(d.done&&d.done[today])||{};
+  var list=(menus[no-1].ids||[]).map(function(id){ return byId[id]; }).filter(function(x){ return x; });
+  var left=list.filter(function(x){ return !doneToday[x.id]; }).length;
+  var many=menus.length>1;
+
   var h='<div class="card"><div class="hw-head">'+
-        '<span class="hw-set">'+esc(d.setName||'あなたの宿題')+'</span>'+
-        (d.given?'<span class="hw-given">'+esc(d.given)+' から</span>':'')+
-        '</div><div class="ex-body">'+d.items.length+'種目。やった日をタップしてください</div></div>';
-  d.items.forEach(function(x){ h+=exCard(x, d.week, d.done||{}); });
+        '<span class="hw-set">'+(many?(no===todayNo?'今日のメニュー':'メニュー '+no):'あなたの宿題')+'</span>'+
+        (many?'<span class="hw-given">'+no+' ／ '+menus.length+'</span>'
+             :(d.given?'<span class="hw-given">'+esc(d.given)+' から</span>':''))+
+        '</div><div class="ex-body">'+list.length+'種目'+
+        (left?('　のこり '+left+'つ'):'　ぜんぶ できています！')+'</div>';
+  if(many){
+    h+='<div class="mnav">';
+    menus.forEach(function(m,i){
+      h+='<button class="mn'+((i+1)===no?' on':'')+((i+1)===todayNo?' td':'')+'" data-mno="'+(i+1)+'">'+(i+1)+'</button>';
+    });
+    h+='</div><div class="ex-body" style="margin-top:7px">今日は '+todayNo+' のばんです。'+
+       '数字を押すと、ほかのメニューも見られます</div>';
+  }
+  h+='</div>';
+  list.forEach(function(x){ h+=exCard(x, today, doneToday); });
+  if(list.length){
+    h+='<div class="card"><button class="btn-save" id="btnAllDone"'+(left?'':' disabled')+'>'+
+       (left?('のこり '+left+'つも、できた'):'ぜんぶ できています')+'</button></div>';
+  }
   $('view-homework').innerHTML=h;
-  bindDays();
+  bindDays(d, list, today);
 }
 
 /* 動画の住所。ファイル名だけならPages上の ex-video/ を見る。http で始まればそのまま */
@@ -927,7 +978,7 @@ function thumb(u, w){
   return /drive\.google\.com/.test(u) ? u.replace(/([?&]sz=)w\d+/, '$1w'+w) : u;
 }
 
-function exCard(x, week, done){
+function exCard(x, today, done){
   var p=PH_NO[x.phase]||0;
   var h='<div class="ex">';
   h+='<div class="ex-top"><span class="ex-id'+(p?' p'+p:'')+'">'+esc(x.id)+'</span>';
@@ -955,29 +1006,65 @@ function exCard(x, week, done){
   }
   h+='<div class="ex-how">'+esc(x.how)+'</div>';
   if(x.tips) h+='<div class="ex-tips">'+esc(x.tips)+'</div>';
-  h+='<div class="days">';
-  week.forEach(function(day,i){
-    var on = done[day] && done[day][x.id];
-    h+='<button class="day'+(on?' on':'')+(day===S.today?' today':'')+'" data-ex="'+esc(x.id)+'" data-date="'+day+'">'+
-       '<div class="d">'+WDAY[i]+'</div><div class="m">'+(on?'✓':'')+'</div></button>';
-  });
+  h+='<div class="days one">';
+  var on = !!done[x.id];
+  h+='<button class="day'+(on?' on':'')+'" data-ex="'+esc(x.id)+'" data-date="'+esc(today)+'">'+
+     '<div class="d">'+(on?'できました':'できたら押す')+'</div>'+
+     '<div class="m">'+(on?'✓':'')+'</div></button>';
   h+='</div></div>';
   return h;
 }
 
-function bindDays(){
+/* 手元のデータにも「できた」を映しておく。画面を描き直しても消えないように */
+function markDone(d, date, exId, on){
+  d.done = d.done || {};
+  d.done[date] = d.done[date] || {};
+  if(on) d.done[date][exId]=true; else delete d.done[date][exId];
+  if(S.hw===d) hwCacheWrite(d);
+}
+
+function bindDays(d, list, today){
+  function paint(b, on){
+    b.classList.toggle('on',on);
+    b.querySelector('.d').textContent = on?'できました':'できたら押す';
+    b.querySelector('.m').textContent = on?'✓':'';
+  }
   Array.prototype.forEach.call(document.querySelectorAll('#view-homework .day'),function(b){
     b.addEventListener('click',function(){
       var on=!b.classList.contains('on');
-      b.classList.toggle('on',on);
-      b.querySelector('.m').textContent = on?'✓':'';
+      paint(b,on);
+      markDone(d, b.dataset.date, b.dataset.ex, on);
       api('saveDone',{ data:{ date:b.dataset.date, exId:b.dataset.ex, done:on } })
         .then(function(){ if(on) toast('できた！ その調子です'); })
         .catch(function(){
-          b.classList.toggle('on',!on);
-          b.querySelector('.m').textContent = on?'':'✓';
+          paint(b,!on);
+          markDone(d, b.dataset.date, b.dataset.ex, !on);
           toast('保存できませんでした');
         });
+    });
+  });
+  /* メニューの切り替え。今日のばん以外も見られる */
+  Array.prototype.forEach.call(document.querySelectorAll('#view-homework [data-mno]'),function(b){
+    b.addEventListener('click',function(){
+      S.hwNo=Number(b.dataset.mno);
+      renderHomework(d);
+      window.scrollTo(0,0);
+    });
+  });
+  /* のこりをまとめて押す */
+  var ab=$('btnAllDone');
+  if(ab) ab.addEventListener('click',function(){
+    var dt=(d.done&&d.done[today])||{};
+    var rest=(list||[]).filter(function(x){ return !dt[x.id]; }).map(function(x){ return x.id; });
+    if(!rest.length) return;
+    ab.disabled=true; ab.textContent='記録しています…';
+    api('saveDoneMany',{data:{date:today, exIds:rest, done:true}}).then(function(){
+      rest.forEach(function(id){ markDone(d, today, id, true); });
+      toast('おつかれさまでした！ 今日のぶん、記録しました');
+      renderHomework(d);
+    }).catch(function(){
+      ab.disabled=false; ab.textContent='のこりも、できた';
+      toast('記録できませんでした');
     });
   });
   /* まっすーが自分の画面で見ているときだけ、写真を消すボタンが出る */
@@ -1011,7 +1098,9 @@ function renderCoachHome(){
   if(!d.students.length) h+='<div class="empty">まだ受講生がいません</div>';
   d.students.forEach(function(s){
     h+='<div class="stu" data-line="'+esc(s.lineId)+'"><span class="nm">'+esc(s.name)+'</span>'+
-       '<span class="mt">'+(s.count?esc(s.setName||'')+'　'+s.count+'種目':'まだ出していない')+'</span></div>';
+       '<span class="mt">'+(s.count
+          ? ((s.menuCount>1 ? s.menuCount+'メニュー　' : '')+s.count+'種目')
+          : 'まだ出していない')+'</span></div>';
   });
   h+='</div><div class="card"><h2>受講生を先に登録する</h2>'+
      '<div class="ex-body">本人がアプリを開く前に、こちらから名簿に入れておけます。<br>'+
@@ -1054,8 +1143,13 @@ function inviteStudent(){
 function openStudent(lineId){
   $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
   api('coachOpen',{data:{lineId:lineId}}).then(function(d){
-    S.target=d; S.sel=d.items.map(function(x){return x.id;}); S.selInfo={};
+    S.target=d; S.selInfo={};
     d.items.forEach(function(x){ S.selInfo[x.id]=x; });
+    /* メニュー（A・B・C・D）。人によって数が変わる。1つだけの人もいる */
+    S.menus = (d.menus && d.menus.length)
+      ? d.menus.map(function(m){ return { name:m.name||'', ids:(m.ids||[]).slice() }; })
+      : [{ name:'', ids:[] }];
+    S.cur = 0;                      // 種目を足す先のメニュー
     S.reps = d.reps || {};          // この人用に決めた回数。空ならEXマスターの共通の回数が出る
     renderAssign();
   }).catch(function(){ toast('開けませんでした'); renderCoachHome(); });
@@ -1065,7 +1159,8 @@ function renderAssign(){
   var d=S.target, c=S.coach;
   var me=(c.students.filter(function(s){return s.lineId===d.lineId;})[0]||{});
   var h='<div class="card"><div class="hw-head"><span class="hw-set">'+esc(me.name||'')+'</span>'+
-        '<span class="hw-given">いま '+S.sel.length+' 種目</span></div>'+
+        '<span class="hw-given">いま '+selCount()+' 種目'+
+        (S.menus.length>1?'／'+S.menus.length+'メニュー':'')+'</span></div>'+
         '<button class="mini" id="btnBack">← 一覧へもどる</button></div>';
 
   h+='<div class="card"><h2>セットから出す</h2><div class="pick">'+
@@ -1074,10 +1169,11 @@ function renderAssign(){
     h+='<option value="'+esc(x.name)+'"'+(x.name===d.setName?' selected':'')+'>'+esc(x.name)+'（'+x.count+'種目）</option>';
   });
   h+='</select></div><div class="pick">'+
-     '<button class="mini fill" id="btnSetAdd">いまのに足す</button>'+
+     '<button class="mini fill" id="btnSetAdd">新しいメニューとして足す</button>'+
      '<button class="mini" id="btnSetNew">ぜんぶ入れかえる</button></div>'+
-     '<div class="ex-body">「足す」は、いま出している種目を残したまま後ろに足します（同じ種目は重なりません）<br>'+
-     '「入れかえる」は、いまの中身を消してセットだけにします</div></div>';
+     '<div class="ex-body">「新しいメニューとして足す」は、いまのメニューを残したまま、'+
+     'もう1つメニューを増やします（A・B・C・D のように回してもらう使い方）<br>'+
+     '「入れかえる」は、いまの中身をぜんぶ消して、そのセット1つだけにします</div></div>';
 
   h+='<div class="card"><h2>1種目ずつ足す</h2><div class="pick">'+
      '<select id="fPhase"><option value="">フェーズすべて</option>';
@@ -1089,10 +1185,12 @@ function renderAssign(){
      '<div class="ex-body">部位はメインとサブの両方から探します</div><div id="found"></div></div>';
 
   h+='<div class="card"><h2>出す内容</h2>'+
-     '<div class="ex-body">↑↓ で並べかえ。この順番のまま受講生に出ます<br>'+
+     '<div class="ex-body">左の ⠿ を押したまま動かすと、並べかえられます。この順番のまま受講生に出ます<br>'+
+     'メニューが2つ以上あると、受講生には1つずつ順ぐりに出ます（A→B→C→D→A…）。'+
+     'メニューの名前は受講生には出ません<br>'+
      '回数とセット数は、この人だけの数字を入れられます。「10回」「1分」「10深呼吸」「各角度20」など文字でもOK<br>'+
      '空にしておくと、うすい字で出ている全員共通の回数が出ます。セット数が1のときは出ません</div>'+
-     '<button class="mini" id="btnSort" style="margin:8px 0 4px;">緩める→伸ばす→支える→鍛える の順に並べる</button>'+
+     '<button class="mini" id="btnSort" style="margin:8px 0 4px;">いま選んでいるメニューを 緩める→伸ばす→支える→鍛える の順に並べる</button>'+
      '<div id="selList"></div>'+
      '<button class="btn-save" id="btnAssign" style="margin-top:12px;">この内容で出す</button></div>';
   $('view-coach').innerHTML=h;
@@ -1108,82 +1206,199 @@ function renderAssign(){
   $('btnSetNew').addEventListener('click',function(){
     var n=$('setSel').value;
     if(!n){ toast('セットを選んでください'); return; }
-    if(S.sel.length && !confirm('いま出している '+S.sel.length+' 種目を消して、「'+n+'」だけにします。よろしいですか？')) return;
+    if(selCount() && !confirm('いま出している '+selCount()+' 種目（'+S.menus.length+'メニュー）を消して、'+
+       '「'+n+'」1つだけにします。よろしいですか？')) return;
     api('coachAssign',{data:{lineId:d.lineId, setName:n}})
       .then(function(r){ toast(r.count+'種目に入れかえました'); openStudent(d.lineId); })
       .catch(function(){ toast('入れかえられませんでした'); });
   });
   $('btnSort').addEventListener('click',function(){
-    S.sel = S.sel.slice().map(function(id,i){
+    var m = S.menus[S.cur];
+    if(!m || !m.ids.length){ toast('並べかえる種目がありません'); return; }
+    m.ids = m.ids.slice().map(function(id,i){
       var p = (S.selInfo[id]||{}).phase || '';
-      var r = PH_NO[p] || 99;
-      return { id:id, i:i, r:r };
+      return { id:id, i:i, r:(PH_NO[p] || 99) };
     }).sort(function(a,b){ return a.r-b.r || a.i-b.i; }).map(function(x){ return x.id; });
     renderSel();
-    toast('緩める→伸ばす→支える→鍛える の順にしました');
+    toast((S.menus.length>1?'メニュー'+(S.cur+1)+'を ':'')+'緩める→伸ばす→支える→鍛える の順にしました');
   });
   $('btnFind').addEventListener('click', doFind);
   $('btnAssign').addEventListener('click',function(){
     var b=$('btnAssign'); b.disabled=true; b.textContent='出しています…';
-    api('coachAssign',{data:{lineId:d.lineId, exIds:S.sel, reps:S.reps||{},
-                             setName:$('setSel').value||d.setName}})
-      .then(function(r){ toast(r.count+'種目 出しました！'); })
+    var menus = S.menus.filter(function(m){ return m.ids.length; })
+                       .map(function(m){ return { name:m.name||'', ids:m.ids }; });
+    api('coachAssign',{data:{lineId:d.lineId, menus:menus, reps:S.reps||{}}})
+      .then(function(r){
+        toast(r.count+'種目'+(r.menuCount>1?'・'+r.menuCount+'メニュー':'')+' 出しました！');
+      })
       .catch(function(){ toast('保存できませんでした'); })
       .then(function(){ b.disabled=false; b.textContent='この内容で出す'; });
   });
   window.scrollTo(0,0);
 }
 
-function renderSel(){
-  var h = S.sel.length ? '' : '<div class="empty">まだ何も入っていません</div>';
-  var n = S.sel.length;
-  S.sel.forEach(function(id,i){
-    var x=S.selInfo[id]||{id:id,how:'',photos:[]};
-    h+='<div class="row-ex">'+
-       '<div class="ord">'+
-         '<button data-up="'+i+'"'+(i===0?' disabled':'')+'>↑</button>'+
-         '<button data-down="'+i+'"'+(i===n-1?' disabled':'')+'>↓</button>'+
-       '</div><span class="no">'+(i+1)+'</span>';
-    if(x.photos && x.photos.length){
-      h+='<img src="'+esc(thumb(x.photos[0],160))+'" loading="lazy" decoding="async" alt="" '+
-         'data-photo="'+esc(id)+'" style="cursor:pointer;border-color:var(--accent);">';
-    }
-    var rp=(S.reps&&S.reps[id])||{};
-    h+='<div class="tx">'+(x.phase?'<span class="ph-tag">'+esc(x.phase)+'</span>':'')+
-       '<b>'+esc(id)+'</b>　'+esc(x.how||'')+'</div>'+
-       '<button class="mini" data-del="'+esc(id)+'">外す</button></div>'+
-       '<div class="rp-row">'+
-         '<input type="text" data-rp="'+esc(id)+'" value="'+esc(rp.reps||'')+'" '+
-           'placeholder="'+esc(x.baseReps||'回数')+'" autocapitalize="off" spellcheck="false">'+
-         '<span class="rp-x">×</span>'+
-         '<input type="text" class="rp-s" data-rs="'+esc(id)+'" value="'+esc(rp.sets||'')+'" '+
-           'placeholder="'+esc(x.baseSets||'セット')+'" autocapitalize="off" spellcheck="false">'+
-       '</div>'+
-       '<div class="phbox" id="phedit-'+esc(id)+'"></div>';
-  });
-  $('selList').innerHTML=h;
+/* いま出している種目ぜんぶ（メニューをまたいで数える） */
+function selAll(){
+  var out=[];
+  (S.menus||[]).forEach(function(m){ (m.ids||[]).forEach(function(id){ out.push(id); }); });
+  return out;
+}
+function selCount(){ return selAll().length; }
 
-  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-del]'),function(b){
+function renderSel(){
+  if(!S.menus || !S.menus.length) S.menus=[{ name:'', ids:[] }];
+  var many = S.menus.length>1;
+  var h='';
+  S.menus.forEach(function(m, mi){
+    h+='<div class="mblock'+(mi===S.cur?' cur':'')+'" data-mi="'+mi+'">'+
+       '<div class="mhead">'+
+         '<span class="mt">'+(many?('メニュー '+(mi+1)):'メニュー')+'</span>'+
+         '<input type="text" class="mname" data-mn="'+mi+'" value="'+esc(m.name||'')+'" '+
+           'placeholder="なまえ（受講生には出ません）" autocapitalize="off" spellcheck="false">'+
+         '<span class="mc">'+m.ids.length+'種目</span>'+
+         (many?'<button class="mini" data-mdel="'+mi+'">このメニューを消す</button>':'')+
+       '</div><div class="mbox" id="mbox-'+mi+'">';
+    if(!m.ids.length) h+='<div class="empty">まだ何も入っていません</div>';
+    m.ids.forEach(function(id,i){ h+=selRow(id, i, mi); });
+    h+='</div>'+
+       (many?'<button class="mini'+(mi===S.cur?' fill':'')+'" data-mpick="'+mi+'">'+
+             (mi===S.cur?'ここに足します':'ここに足す')+'</button>':'')+
+       '</div>';
+  });
+  h+='<button class="mini" id="btnMenuAdd">＋ メニューをもう1つ足す</button>';
+  $('selList').innerHTML=h;
+  bindSel();
+}
+
+function selRow(id, i, mi){
+  var x=S.selInfo[id]||{id:id,how:'',photos:[]};
+  var rp=(S.reps&&S.reps[id])||{};
+  var h='<div class="exrow" data-exid="'+esc(id)+'">'+
+     '<div class="row-ex">'+
+       '<button class="grip" data-grip="1" title="押したまま動かすと並べかえ">⠿</button>'+
+       '<span class="no">'+(i+1)+'</span>';
+  if(x.photos && x.photos.length){
+    h+='<img src="'+esc(thumb(x.photos[0],160))+'" loading="lazy" decoding="async" alt="" '+
+       'data-photo="'+esc(id)+'" style="cursor:pointer;border-color:var(--accent);">';
+  }
+  h+='<div class="tx">'+(x.phase?'<span class="ph-tag">'+esc(x.phase)+'</span>':'')+
+     '<b>'+esc(id)+'</b>　'+esc(x.how||'')+'</div>'+
+     '<button class="mini" data-del="'+esc(id)+'" data-dmi="'+mi+'">外す</button>'+
+     '</div>'+
+     '<div class="rp-row">'+
+       '<input type="text" data-rp="'+esc(id)+'" value="'+esc(rp.reps||'')+'" '+
+         'placeholder="'+esc(x.baseReps||'回数')+'" autocapitalize="off" spellcheck="false">'+
+       '<span class="rp-x">×</span>'+
+       '<input type="text" class="rp-s" data-rs="'+esc(id)+'" value="'+esc(rp.sets||'')+'" '+
+         'placeholder="'+esc(x.baseSets||'セット')+'" autocapitalize="off" spellcheck="false">'+
+     '</div>'+
+     '<div class="phbox" id="phedit-'+esc(id)+'"></div>'+
+     '</div>';
+  return h;
+}
+
+function bindSel(){
+  var box=$('selList');
+  if(!box) return;
+
+  Array.prototype.forEach.call(box.querySelectorAll('[data-del]'),function(b){
     b.addEventListener('click',function(){
-      S.sel=S.sel.filter(function(x){return x!==b.dataset.del;});
+      var mi=Number(b.dataset.dmi), id=b.dataset.del;
+      var m=S.menus[mi]; if(!m) return;
+      var at=m.ids.indexOf(id);
+      if(at>=0) m.ids.splice(at,1);
       renderSel();
     });
   });
-  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-up]'),function(b){
-    b.addEventListener('click',function(){ moveSel(Number(b.dataset.up), -1); });
-  });
-  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-down]'),function(b){
-    b.addEventListener('click',function(){ moveSel(Number(b.dataset.down), 1); });
-  });
-  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-photo]'),function(b){
+  Array.prototype.forEach.call(box.querySelectorAll('[data-photo]'),function(b){
     b.addEventListener('click',function(){ togglePhotoEdit(b.dataset.photo); });
   });
   /* 回数・セット数は打つたびに覚えておく。並べかえても消えない */
-  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-rp]'),function(b){
+  Array.prototype.forEach.call(box.querySelectorAll('[data-rp]'),function(b){
     b.addEventListener('input',function(){ setRep(b.dataset.rp,'reps',b.value); });
   });
-  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-rs]'),function(b){
+  Array.prototype.forEach.call(box.querySelectorAll('[data-rs]'),function(b){
     b.addEventListener('input',function(){ setRep(b.dataset.rs,'sets',b.value); });
+  });
+  /* メニューの名前。こちらの覚え書きで、受講生には出ない */
+  Array.prototype.forEach.call(box.querySelectorAll('[data-mn]'),function(b){
+    b.addEventListener('input',function(){
+      var m=S.menus[Number(b.dataset.mn)];
+      if(m) m.name=String(b.value||'').trim();
+    });
+  });
+  /* 種目を足す先を選ぶ */
+  Array.prototype.forEach.call(box.querySelectorAll('[data-mpick]'),function(b){
+    b.addEventListener('click',function(){ S.cur=Number(b.dataset.mpick); renderSel(); });
+  });
+  /* メニューごと消す */
+  Array.prototype.forEach.call(box.querySelectorAll('[data-mdel]'),function(b){
+    b.addEventListener('click',function(){
+      var mi=Number(b.dataset.mdel), m=S.menus[mi];
+      if(!m) return;
+      if(m.ids.length && !confirm('メニュー'+(mi+1)+'の '+m.ids.length+' 種目を消します。よろしいですか？')) return;
+      S.menus.splice(mi,1);
+      if(!S.menus.length) S.menus=[{ name:'', ids:[] }];
+      if(S.cur>=S.menus.length) S.cur=S.menus.length-1;
+      renderSel();
+    });
+  });
+  var ma=$('btnMenuAdd');
+  if(ma) ma.addEventListener('click',function(){
+    S.menus.push({ name:'', ids:[] });
+    S.cur=S.menus.length-1;
+    renderSel();
+    toast('メニュー'+S.menus.length+'を足しました。ここに種目を入れてください');
+  });
+
+  bindDrag(box);
+}
+
+/* つまみを押したまま動かして並べかえる。入れかえは同じメニューの中だけ */
+function bindDrag(box){
+  var drag=null;
+  box.addEventListener('pointerdown',function(e){
+    var g=e.target&&e.target.closest?e.target.closest('[data-grip]'):null;
+    if(!g) return;
+    e.preventDefault();
+    drag=g.closest('.exrow');
+    if(!drag) return;
+    drag.classList.add('dragging');
+    try{ g.setPointerCapture(e.pointerId); }catch(err){}
+  });
+  box.addEventListener('pointermove',function(e){
+    if(!drag) return;
+    e.preventDefault();
+    /* 画面の端まで来たら、少しずつ動かす */
+    if(e.clientY < 96) window.scrollBy(0,-14);
+    else if(e.clientY > window.innerHeight-96) window.scrollBy(0,14);
+    var el=document.elementFromPoint(e.clientX, e.clientY);
+    var over=el&&el.closest?el.closest('.exrow'):null;
+    if(!over || over===drag || over.parentNode!==drag.parentNode) return;
+    var r=over.getBoundingClientRect();
+    over.parentNode.insertBefore(drag, (e.clientY > r.top + r.height/2) ? over.nextSibling : over);
+  });
+  function end(){
+    if(!drag) return;
+    drag.classList.remove('dragging');
+    drag=null;
+    commitOrder();
+  }
+  box.addEventListener('pointerup', end);
+  box.addEventListener('pointercancel', end);
+}
+
+/* 画面の並びを、持っているデータへ写して番号を振り直す */
+function commitOrder(){
+  (S.menus||[]).forEach(function(m, mi){
+    var b=document.getElementById('mbox-'+mi);
+    if(!b) return;
+    var rows=b.querySelectorAll('.exrow');
+    m.ids=Array.prototype.map.call(rows,function(e){ return e.dataset.exid; });
+    Array.prototype.forEach.call(rows,function(e,i){
+      var n=e.querySelector('.no');
+      if(n) n.textContent=(i+1);
+    });
   });
 }
 
@@ -1194,27 +1409,23 @@ function setRep(id, key, val){
   S.reps[id][key] = String(val||'').trim();
 }
 
-/* 並べかえ。ひとつ上／ひとつ下へ */
-function moveSel(i, d){
-  var j = i + d;
-  if(i<0 || j<0 || i>=S.sel.length || j>=S.sel.length) return;
-  var t = S.sel[i]; S.sel[i] = S.sel[j]; S.sel[j] = t;
-  renderSel();
-}
-
-/* 足すときは、緩める→伸ばす→支える→鍛える の並びに収まる場所へ入れる。
- * 並びを変えたければ、あとから↑↓で動かせる */
+/* 足すときは、いま選んでいるメニューの中の
+ * 緩める→伸ばす→支える→鍛える の並びに収まる場所へ入れる。
+ * 並びを変えたければ、あとから ⠿ で動かせる */
 function addToSel(id){
-  if(S.sel.indexOf(id)>=0){ toast('もう入っています'); return; }
+  if(!S.menus || !S.menus.length) S.menus=[{ name:'', ids:[] }];
+  if(S.cur==null || S.cur>=S.menus.length) S.cur=0;
+  var m = S.menus[S.cur];
+  if(m.ids.indexOf(id)>=0){ toast('このメニューにもう入っています'); return; }
   var r = PH_NO[(S.selInfo[id]||{}).phase||''] || 99;
-  var at = S.sel.length;
-  for(var i=0;i<S.sel.length;i++){
-    var ri = PH_NO[(S.selInfo[S.sel[i]]||{}).phase||''] || 99;
+  var at = m.ids.length;
+  for(var i=0;i<m.ids.length;i++){
+    var ri = PH_NO[(S.selInfo[m.ids[i]]||{}).phase||''] || 99;
     if(ri > r){ at = i; break; }
   }
-  S.sel.splice(at, 0, id);
+  m.ids.splice(at, 0, id);
   renderSel();
-  toast((at+1)+'番目に足しました');
+  toast((S.menus.length>1?'メニュー'+(S.cur+1)+'の ':'')+(at+1)+'番目に足しました');
 }
 
 /* 写真の入れかえ。変な写真が混ざっていたら、その1枚だけ消せる */
