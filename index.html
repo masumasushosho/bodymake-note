@@ -4,8 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>痩せ体質完成ノート</title>
-<!-- LIFF SDK（LINE公式。開いた人が誰かを判別するために必須） -->
-<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<!-- つなぎ先を先に開いておく。最初の1回で接続の準備を済ませておくと、
+     本番の通信を待たずにすむ -->
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="preconnect" href="https://drive.google.com" crossorigin>
+<link rel="preconnect" href="https://lh3.googleusercontent.com" crossorigin>
+<!-- LIFF SDK（LINE公式。開いた人が誰かを判別するために必須）
+     defer にして、SDKの読み込みを待たずに画面の枠を先に出す -->
+<script defer src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   /* ===== 設定色（ボディメイクプラスのロゴから取る） ===== */
   :root{
@@ -183,7 +190,11 @@
   .shot .n{position:absolute;left:6px;top:6px;min-width:22px;height:22px;border-radius:11px;
            background:rgba(58,85,120,.86);color:#fff;font-size:13px;font-weight:700;
            display:flex;align-items:center;justify-content:center;padding:0 6px;}
-  .ex-how{margin-top:10px;font-size:16px;line-height:1.65;}
+  .ex-how{margin-top:10px;font-size:16px;line-height:1.65;white-space:pre-wrap;}
+  .exv{width:100%;max-height:60vh;border-radius:12px;background:#000;display:block;}
+  .ex-tips{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:14px;line-height:1.6;
+           background:var(--accent-weak);color:var(--ink);white-space:pre-wrap;}
+  .ex-tips b{color:var(--accent);}
   /* できたは曜日ごとに7つ */
   .days{display:flex;gap:6px;margin-top:12px;}
   .day{flex:1;min-width:0;border:1px solid var(--line);background:#fff;border-radius:10px;
@@ -207,6 +218,29 @@
   .mini{font-size:14px;padding:7px 12px;border-radius:9px;border:1px solid var(--accent);
         background:#fff;color:var(--accent);font-weight:700;cursor:pointer;}
   .mini.fill{background:var(--accent);color:#fff;}
+
+  /* 並べかえ用の上下ボタン */
+  .ord{display:flex;flex-direction:column;gap:3px;flex:0 0 auto;}
+  .ord button{width:34px;height:25px;padding:0;font-size:13px;line-height:1;border-radius:7px;
+              border:1px solid var(--line);background:#fff;color:var(--sub);font-weight:700;cursor:pointer;}
+  .ord button:disabled{opacity:.3;}
+  .row-ex .no{flex:0 0 auto;width:22px;text-align:right;font-size:13px;color:var(--sub);font-weight:700;}
+  .rp-row{display:flex;align-items:center;gap:7px;padding:0 4px 10px 56px;}
+  .rp-row input{flex:1;min-width:0;padding:7px 9px;font-size:14px;}
+  .rp-row input.rp-s{flex:0 0 96px;}
+  .rp-row input::placeholder{color:var(--sub);opacity:.5;}      /* 全員共通の回数は、うすい字で見せる */
+  .rp-row input::-webkit-input-placeholder{color:var(--sub);opacity:.5;}
+  .rp-x{font-size:13px;color:var(--sub);flex:0 0 auto;}
+  .row-ex .ph-tag{font-size:11px;padding:2px 7px;border-radius:999px;background:var(--accent-weak);
+                  color:var(--accent);font-weight:700;margin-right:6px;white-space:nowrap;}
+
+  /* 写真の入れかえパネル */
+  .ph-edit{margin-top:10px;padding:12px;border-radius:12px;background:var(--accent-weak);}
+  .ph-edit .shots{margin-top:8px;}
+  .shot .x{position:absolute;right:6px;top:6px;width:26px;height:26px;border-radius:13px;border:none;
+           background:rgba(0,0,0,.62);color:#fff;font-size:15px;font-weight:700;line-height:26px;
+           padding:0;cursor:pointer;}
+  .shot .x:active{background:rgba(0,0,0,.85);}
 </style>
 </head>
 <body>
@@ -275,6 +309,7 @@ function api(action, payload){
     headers:{'Content-Type':'text/plain;charset=utf-8'},  // プリフライトを避ける
     body: JSON.stringify(body)
   }).then(function(r){ return r.json(); }).then(function(res){
+    if(res && res.ms) S.lastMs = res.ms;          /* どこで待ったかの内訳 */
     if(!res.ok) throw new Error(res.error || 'server error');
     return res.data;
   });
@@ -301,25 +336,88 @@ function showView(name){
 }
 
 /* ================= 起動 ================= */
+/* 前回開いたときの内容を端末に覚えておき、次に開いたときはそれを先に出す。
+ * サーバーから最新が届いたら、あとから静かに差し替える。
+ * 立ち上がりは GAS の準備とシートを開く時間で数秒かかるので、
+ * 「待たせない」はここで作る */
+var BOOT_KEY = 'bm_boot_v1';
+function bootCacheRead(){
+  try{
+    var s = localStorage.getItem(BOOT_KEY);
+    if(!s) return null;
+    var c = JSON.parse(s);
+    return (c && c.name !== undefined) ? c : null;
+  }catch(e){ return null; }
+}
+function bootCacheWrite(d){
+  try{
+    localStorage.setItem(BOOT_KEY, JSON.stringify({
+      name:d.name, isCoach:!!d.isCoach, today:d.today, hasKarte:!!d.hasKarte,
+      shootDates:d.shootDates||[], todayDiary:d.todayDiary||null, homework:d.homework||null
+    }));
+  }catch(e){}
+}
+/* 端末側の今日。キャッシュが前日のものかを見分けるため */
+function todayLocal(){
+  var d=new Date();
+  return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+}
+
+function applyBoot(d){
+  S.name=d.name||''; S.shootDates=d.shootDates||[]; S.isCoach=!!d.isCoach;
+  S.today=d.today||todayLocal();
+  S.hw=d.homework||null;
+  if(S.isCoach) $('btnCoach').classList.remove('hidden');
+  $('hello').textContent = S.name ? (S.name+' さん') : 'ようこそ';
+  /* 打ちはじめていたら書き換えない。数字を消してしまわないため */
+  if(!S.dirty) renderRecord(d.todayDiary);
+  $('loading').classList.add('hidden');
+  if(!S.tabsReady){ setupTabs(); showView('record'); S.tabsReady=true; }
+}
+
 function boot(){
-  if(!window.liff){ fail('つながりませんでした。もう一度開いてください'); return; }
+  var t0 = Date.now();
+  var c = bootCacheRead();
+  if(c){
+    if(c.today !== todayLocal()){ c.today = todayLocal(); c.todayDiary = null; }
+    applyBoot(c);                                  /* 通信を待たずに先に出す */
+  }
+  if(!window.liff){
+    if(!c) fail('つながりませんでした。もう一度開いてください');
+    return;
+  }
   liff.init({ liffId: CONFIG.LIFF_ID }).then(function(){
     if(!liff.isLoggedIn()){ liff.login(); return; }
     S.idToken = liff.getIDToken();
     return api('bootstrap', {});
   }).then(function(d){
     if(!d) return;
-    S.name=d.name; S.today=d.today; S.shootDates=d.shootDates||[]; S.isCoach=!!d.isCoach;
-    S.hw=d.homework||null;
-    if(S.isCoach) $('btnCoach').classList.remove('hidden');
-    $('hello').textContent = d.name ? (d.name+' さん') : 'ようこそ';
-    renderRecord(d.todayDiary);
-    $('loading').classList.add('hidden');
-    setupTabs();
-    showView('record');
+    bootCacheWrite(d);
+    applyBoot(d);
+    if(S.isCoach) showBootMs(Date.now() - t0);
   }).catch(function(e){
-    fail('読み込みに失敗しました。電波の良い場所でもう一度お試しください');
+    if(c) toast('最新にできませんでした。前回の内容を出しています');
+    else fail('読み込みに失敗しました。電波の良い場所でもう一度お試しください');
   });
+}
+
+/* まっすーの画面だけ、どこで待ったかを秒数で出す。
+ * これを見てから次の手を打つ（あて推量で直さない） */
+function showBootMs(total){
+  var m = S.lastMs || {};
+  function s(v){ return (Math.round(v)/1000).toFixed(1); }
+  var parts = [];
+  if(m.verify!=null)  parts.push('本人確認 '+s(m.verify));
+  if(m.student!=null) parts.push('名簿 '+s(m.student));
+  if(m.action!=null)  parts.push('中身 '+s(m.action));
+  var line = '起動 '+s(total)+'秒（サーバー '+(m.total!=null?s(m.total):'—')+'秒'+
+             (parts.length?'：'+parts.join('／'):'')+'）';
+  var v = $('view-record'); if(!v) return;
+  var box = document.createElement('div');
+  box.className = 'muted num';
+  box.style.cssText = 'text-align:center;font-size:11px;padding:2px 0 6px;';
+  box.textContent = line;
+  v.insertBefore(box, v.firstChild);
 }
 function fail(msg){
   $('loading').innerHTML='<div class="empty">'+msg+'</div>';
@@ -447,6 +545,21 @@ function renderRecord(diary){
       renderRecordSave();
     });
   });
+
+  /* 何か1つでも入力したら、あとから届いた最新で描き換えない。
+     中身は毎回入れ替わるので、見張りは外の箱に1回だけ付ける */
+  if(!S.dirtyHooked){
+    S.dirtyHooked = true;
+    var box = $('view-record');
+    box.addEventListener('input', function(){ S.dirty = true; });
+    box.addEventListener('click', function(ev){
+      var t = ev.target;
+      while(t && t !== box){
+        if(t.classList && t.classList.contains('choice')){ S.dirty = true; return; }
+        t = t.parentNode;
+      }
+    });
+  }
 }
 function bindChoices(groupId, current){
   var g=$(groupId); if(!g) return;
@@ -470,6 +583,7 @@ function saveRecord(){
   if($('rec_体調')) data['体調']=selected('rec_体調');
   if($('rec_運動')) data['運動']=selected('rec_運動');
   if($('rec_気づき')) data['その日の気づき']=$('rec_気づき').value;
+  S.dirty = false;                       /* 保存できたら、また最新で描き換えてよい */
   api('saveDaily',{data:data}).then(function(){
     toast('保存しました'); btn.disabled=false; btn.textContent='保存する';
   }).catch(function(){
@@ -757,11 +871,31 @@ function fmt(v){ return (v==='' || v==null)?'—':v; }
 var WDAY = ['月','火','水','木','金','土','日'];
 var PH_NO = { '緩める':1, '伸ばす':2, '支える':3, '鍛える':4 };
 
+/* 前に見た宿題を端末に覚えておく。次に開いたとき、待たずに出すため。
+ * あくまで見た目を先に出すだけで、すぐ裏で新しいものを取りにいって置きかえる */
+var HW_KEY = 'bm_hw_v1';
+function hwCacheRead(){
+  try{
+    var s = localStorage.getItem(HW_KEY);
+    if(!s) return null;
+    var c = JSON.parse(s);
+    return (c && c.items && c.items.length) ? c : null;
+  }catch(e){ return null; }
+}
+function hwCacheWrite(d){
+  try{ localStorage.setItem(HW_KEY, JSON.stringify(d)); }catch(e){}
+}
+
 function loadHomework(force){
-  if(!force && S.hw){ renderHomework(S.hw); return; }   // 起動時に受け取ったぶんを使う
-  $('view-homework').innerHTML='<div class="empty">読み込んでいます…</div>';
-  api('getHomework',{}).then(function(d){ S.hw=d; renderHomework(d); })
-    .catch(function(){ $('view-homework').innerHTML='<div class="empty">読み込めませんでした。電波の良い場所でもう一度お試しください</div>'; });
+  if(!force && S.hw){ renderHomework(S.hw); hwCacheWrite(S.hw); return; }   // 起動時に受け取ったぶんを使う
+  var c = hwCacheRead();
+  if(c) renderHomework(c);                                   // まず前回のぶんを出す
+  else $('view-homework').innerHTML='<div class="empty">読み込んでいます…</div>';
+  api('getHomework',{}).then(function(d){ S.hw=d; hwCacheWrite(d); renderHomework(d); })
+    .catch(function(){
+      if(!c) $('view-homework').innerHTML='<div class="empty">読み込めませんでした。電波の良い場所でもう一度お試しください</div>';
+      else toast('最新にできませんでした。前回の内容を出しています');
+    });
 }
 
 function renderHomework(d){
@@ -779,23 +913,49 @@ function renderHomework(d){
   bindDays();
 }
 
+/* 動画の住所。ファイル名だけならPages上の ex-video/ を見る。http で始まればそのまま */
+function vUrl(v){
+  v = String(v||'').trim();
+  return /^https?:/i.test(v) ? v : ('ex-video/' + v);
+}
+
+/* 写真を、画面に出す大きさに合わせて取りにいく。
+ * マスターには sz=w600 で入っているが、宿題のコマは132px、一覧は52px。
+ * 大きいまま読むと待ち時間がのびるので、ここで小さい方を頼む（マスターは書き換えない） */
+function thumb(u, w){
+  u = String(u||'');
+  return /drive\.google\.com/.test(u) ? u.replace(/([?&]sz=)w\d+/, '$1w'+w) : u;
+}
+
 function exCard(x, week, done){
   var p=PH_NO[x.phase]||0;
   var h='<div class="ex">';
   h+='<div class="ex-top"><span class="ex-id'+(p?' p'+p:'')+'">'+esc(x.id)+'</span>';
   h+='<span class="ex-body">'+esc(x.phase||'')+(x.body?'／'+esc(x.body):'')+
      (x.sub&&x.sub.length?' <span style="opacity:.75">+'+esc(x.sub.join('・'))+'</span>':'')+'</span>';
-  var r=[]; if(x.reps) r.push(x.reps); if(x.sets) r.push(x.sets);
+  /* 回数とセット数。1セットは書く意味がないので出さない。
+   * 「1分」「10深呼吸」のような文字でも、そのまま出る */
+  var r=[]; if(x.reps) r.push(x.reps);
+  var st=String(x.sets||'').trim();
+  if(st && st!=='1' && st!=='1セット') r.push(st);
   if(r.length) h+='<span class="ex-reps">'+esc(r.join(' × '))+'</span>';
   h+='</div>';
-  if(x.photos && x.photos.length){
+  if(x.video){
+    h+='<video class="exv" src="'+esc(vUrl(x.video))+'" controls playsinline preload="none"'+
+       ((x.photos&&x.photos.length)?' poster="'+esc(thumb(x.photos[0],600))+'"':'')+'></video>';
+  } else if(x.photos && x.photos.length){
     h+='<div class="shots">';
     x.photos.forEach(function(u,i){
-      h+='<div class="shot"><img src="'+esc(u)+'" loading="lazy" alt=""><span class="n">'+(i+1)+'</span></div>';
+      h+='<div class="shot"><img src="'+esc(thumb(u,300))+'" loading="lazy" decoding="async" alt="">'+
+         '<span class="n">'+(i+1)+'</span>'+
+         (S.isCoach?'<button class="x" data-hwph="'+esc(x.id)+'" data-i="'+i+'">×</button>':'')+
+         '</div>';
     });
     h+='</div>';
   }
-  h+='<div class="ex-how">'+esc(x.how)+'</div><div class="days">';
+  h+='<div class="ex-how">'+esc(x.how)+'</div>';
+  if(x.tips) h+='<div class="ex-tips">'+esc(x.tips)+'</div>';
+  h+='<div class="days">';
   week.forEach(function(day,i){
     var on = done[day] && done[day][x.id];
     h+='<button class="day'+(on?' on':'')+(day===S.today?' today':'')+'" data-ex="'+esc(x.id)+'" data-date="'+day+'">'+
@@ -820,6 +980,20 @@ function bindDays(){
         });
     });
   });
+  /* まっすーが自分の画面で見ているときだけ、写真を消すボタンが出る */
+  Array.prototype.forEach.call(document.querySelectorAll('#view-homework [data-hwph]'),function(b){
+    b.addEventListener('click',function(){
+      var id=b.dataset.hwph, i=Number(b.dataset.i);
+      if(!confirm(id+' の '+(i+1)+'枚目を消します。元に戻せません。よろしいですか？')) return;
+      b.disabled=true;
+      api('coachDelPhoto',{data:{exId:id, index:i}}).then(function(r){
+        (S.hw.items||[]).forEach(function(x){ if(x.id===id && x.photos) x.photos.splice(i,1); });
+        hwCacheWrite(S.hw);
+        toast('消しました。のこり '+r.left+'枚');
+        renderHomework(S.hw);
+      }).catch(function(e){ b.disabled=false; toast('消せませんでした：'+String(e.message||e)); });
+    });
+  });
 }
 
 /* ============================================================
@@ -839,7 +1013,16 @@ function renderCoachHome(){
     h+='<div class="stu" data-line="'+esc(s.lineId)+'"><span class="nm">'+esc(s.name)+'</span>'+
        '<span class="mt">'+(s.count?esc(s.setName||'')+'　'+s.count+'種目':'まだ出していない')+'</span></div>';
   });
-  h+='</div><div class="card"><h2>種目を足す</h2>'+
+  h+='</div><div class="card"><h2>受講生を先に登録する</h2>'+
+     '<div class="ex-body">本人がアプリを開く前に、こちらから名簿に入れておけます。<br>'+
+     '先に宿題を出しておけば、本人が初めて開いた瞬間にもう入っています。<br>'+
+     'LINE IDはエルメの友だち一覧からコピーしてください（Uではじまる長い文字）</div>'+
+     '<div class="field"><label>お名前</label>'+
+     '<input type="text" id="invName" placeholder="例：石井弓夏"></div>'+
+     '<div class="field"><label>LINE ID</label>'+
+     '<input type="text" id="invId" placeholder="U04ff9481f32f…" autocapitalize="off" autocorrect="off" spellcheck="false"></div>'+
+     '<button class="btn-sub" id="btnInvite" style="margin-top:4px;">名簿に登録する</button></div>';
+  h+='<div class="card"><h2>種目を足す</h2>'+
      '<div class="ex-body">新しい種目をEXマスターに登録します。写真は5枚まで</div>'+
      '<button class="btn-sub" id="btnNewEx" style="margin-top:10px;">種目を新しく作る</button></div>';
   $('view-coach').innerHTML=h;
@@ -847,7 +1030,25 @@ function renderCoachHome(){
     b.addEventListener('click',function(){ openStudent(b.dataset.line); });
   });
   $('btnNewEx').addEventListener('click', renderNewEx);
+  $('btnInvite').addEventListener('click', inviteStudent);
   window.scrollTo(0,0);
+}
+
+/* 本人が開く前に名簿へ入れる。
+ * LINE ID はエルメの友だち一覧にあるものをそのまま貼る */
+function inviteStudent(){
+  var nm = $('invName').value.trim();
+  var id = $('invId').value.trim();
+  if(!nm){ toast('お名前を入れてください'); return; }
+  if(!/^U[0-9a-f]{32}$/.test(id)){ toast('LINE IDの形がちがいます（Uではじまる33文字）'); return; }
+  var b = $('btnInvite'); b.disabled = true; b.textContent = '登録しています…';
+  api('coachInvite',{data:{lineId:id, name:nm}}).then(function(r){
+    toast(r.already ? (r.name+' さんはもう名簿にいます') : (r.name+' さんを登録しました'));
+    loadCoach();
+  }).catch(function(e){
+    toast(String(e.message||'登録できませんでした'));
+    b.disabled = false; b.textContent = '名簿に登録する';
+  });
 }
 
 function openStudent(lineId){
@@ -855,6 +1056,7 @@ function openStudent(lineId){
   api('coachOpen',{data:{lineId:lineId}}).then(function(d){
     S.target=d; S.sel=d.items.map(function(x){return x.id;}); S.selInfo={};
     d.items.forEach(function(x){ S.selInfo[x.id]=x; });
+    S.reps = d.reps || {};          // この人用に決めた回数。空ならEXマスターの共通の回数が出る
     renderAssign();
   }).catch(function(){ toast('開けませんでした'); renderCoachHome(); });
 }
@@ -871,8 +1073,11 @@ function renderAssign(){
   c.sets.forEach(function(x){
     h+='<option value="'+esc(x.name)+'"'+(x.name===d.setName?' selected':'')+'>'+esc(x.name)+'（'+x.count+'種目）</option>';
   });
-  h+='</select><button class="mini fill" id="btnSet">入れる</button></div>'+
-     '<div class="ex-body">セットを入れると、いまの中身がまるごと置きかわります</div></div>';
+  h+='</select></div><div class="pick">'+
+     '<button class="mini fill" id="btnSetAdd">いまのに足す</button>'+
+     '<button class="mini" id="btnSetNew">ぜんぶ入れかえる</button></div>'+
+     '<div class="ex-body">「足す」は、いま出している種目を残したまま後ろに足します（同じ種目は重なりません）<br>'+
+     '「入れかえる」は、いまの中身を消してセットだけにします</div></div>';
 
   h+='<div class="card"><h2>1種目ずつ足す</h2><div class="pick">'+
      '<select id="fPhase"><option value="">フェーズすべて</option>';
@@ -883,41 +1088,176 @@ function renderAssign(){
      '<input type="text" id="fQ" placeholder="言葉でさがす"><button class="mini fill" id="btnFind">さがす</button></div>'+
      '<div class="ex-body">部位はメインとサブの両方から探します</div><div id="found"></div></div>';
 
-  h+='<div class="card"><h2>出す内容</h2><div id="selList"></div>'+
+  h+='<div class="card"><h2>出す内容</h2>'+
+     '<div class="ex-body">↑↓ で並べかえ。この順番のまま受講生に出ます<br>'+
+     '回数とセット数は、この人だけの数字を入れられます。「10回」「1分」「10深呼吸」「各角度20」など文字でもOK<br>'+
+     '空にしておくと、うすい字で出ている全員共通の回数が出ます。セット数が1のときは出ません</div>'+
+     '<button class="mini" id="btnSort" style="margin:8px 0 4px;">緩める→伸ばす→支える→鍛える の順に並べる</button>'+
+     '<div id="selList"></div>'+
      '<button class="btn-save" id="btnAssign" style="margin-top:12px;">この内容で出す</button></div>';
   $('view-coach').innerHTML=h;
   renderSel();
   $('btnBack').addEventListener('click', renderCoachHome);
-  $('btnSet').addEventListener('click',function(){
+  $('btnSetAdd').addEventListener('click',function(){
     var n=$('setSel').value;
     if(!n){ toast('セットを選んでください'); return; }
-    api('coachAssign',{data:{lineId:d.lineId,setName:n}})
-      .then(function(r){ toast(r.count+'種目 入れました'); openStudent(d.lineId); })
-      .catch(function(){ toast('入れられませんでした'); });
+    api('coachAssign',{data:{lineId:d.lineId, setName:n, mode:'add'}})
+      .then(function(r){ toast('足しました。いま '+r.count+' 種目'); openStudent(d.lineId); })
+      .catch(function(){ toast('足せませんでした'); });
+  });
+  $('btnSetNew').addEventListener('click',function(){
+    var n=$('setSel').value;
+    if(!n){ toast('セットを選んでください'); return; }
+    if(S.sel.length && !confirm('いま出している '+S.sel.length+' 種目を消して、「'+n+'」だけにします。よろしいですか？')) return;
+    api('coachAssign',{data:{lineId:d.lineId, setName:n}})
+      .then(function(r){ toast(r.count+'種目に入れかえました'); openStudent(d.lineId); })
+      .catch(function(){ toast('入れかえられませんでした'); });
+  });
+  $('btnSort').addEventListener('click',function(){
+    S.sel = S.sel.slice().map(function(id,i){
+      var p = (S.selInfo[id]||{}).phase || '';
+      var r = PH_NO[p] || 99;
+      return { id:id, i:i, r:r };
+    }).sort(function(a,b){ return a.r-b.r || a.i-b.i; }).map(function(x){ return x.id; });
+    renderSel();
+    toast('緩める→伸ばす→支える→鍛える の順にしました');
   });
   $('btnFind').addEventListener('click', doFind);
   $('btnAssign').addEventListener('click',function(){
-    api('coachAssign',{data:{lineId:d.lineId, exIds:S.sel, setName:$('setSel').value||d.setName}})
+    var b=$('btnAssign'); b.disabled=true; b.textContent='出しています…';
+    api('coachAssign',{data:{lineId:d.lineId, exIds:S.sel, reps:S.reps||{},
+                             setName:$('setSel').value||d.setName}})
       .then(function(r){ toast(r.count+'種目 出しました！'); })
-      .catch(function(){ toast('保存できませんでした'); });
+      .catch(function(){ toast('保存できませんでした'); })
+      .then(function(){ b.disabled=false; b.textContent='この内容で出す'; });
   });
   window.scrollTo(0,0);
 }
 
 function renderSel(){
   var h = S.sel.length ? '' : '<div class="empty">まだ何も入っていません</div>';
-  S.sel.forEach(function(id){
+  var n = S.sel.length;
+  S.sel.forEach(function(id,i){
     var x=S.selInfo[id]||{id:id,how:'',photos:[]};
-    h+='<div class="row-ex">'+((x.photos&&x.photos.length)?'<img src="'+esc(x.photos[0])+'" loading="lazy" alt="">':'')+
-       '<div class="tx"><b>'+esc(id)+'</b>　'+esc(x.how||'')+'</div>'+
-       '<button class="mini" data-del="'+esc(id)+'">外す</button></div>';
+    h+='<div class="row-ex">'+
+       '<div class="ord">'+
+         '<button data-up="'+i+'"'+(i===0?' disabled':'')+'>↑</button>'+
+         '<button data-down="'+i+'"'+(i===n-1?' disabled':'')+'>↓</button>'+
+       '</div><span class="no">'+(i+1)+'</span>';
+    if(x.photos && x.photos.length){
+      h+='<img src="'+esc(thumb(x.photos[0],160))+'" loading="lazy" decoding="async" alt="" '+
+         'data-photo="'+esc(id)+'" style="cursor:pointer;border-color:var(--accent);">';
+    }
+    var rp=(S.reps&&S.reps[id])||{};
+    h+='<div class="tx">'+(x.phase?'<span class="ph-tag">'+esc(x.phase)+'</span>':'')+
+       '<b>'+esc(id)+'</b>　'+esc(x.how||'')+'</div>'+
+       '<button class="mini" data-del="'+esc(id)+'">外す</button></div>'+
+       '<div class="rp-row">'+
+         '<input type="text" data-rp="'+esc(id)+'" value="'+esc(rp.reps||'')+'" '+
+           'placeholder="'+esc(x.baseReps||'回数')+'" autocapitalize="off" spellcheck="false">'+
+         '<span class="rp-x">×</span>'+
+         '<input type="text" class="rp-s" data-rs="'+esc(id)+'" value="'+esc(rp.sets||'')+'" '+
+           'placeholder="'+esc(x.baseSets||'セット')+'" autocapitalize="off" spellcheck="false">'+
+       '</div>'+
+       '<div class="phbox" id="phedit-'+esc(id)+'"></div>';
   });
   $('selList').innerHTML=h;
+
   Array.prototype.forEach.call(document.querySelectorAll('#selList [data-del]'),function(b){
     b.addEventListener('click',function(){
       S.sel=S.sel.filter(function(x){return x!==b.dataset.del;});
       renderSel();
     });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-up]'),function(b){
+    b.addEventListener('click',function(){ moveSel(Number(b.dataset.up), -1); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-down]'),function(b){
+    b.addEventListener('click',function(){ moveSel(Number(b.dataset.down), 1); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-photo]'),function(b){
+    b.addEventListener('click',function(){ togglePhotoEdit(b.dataset.photo); });
+  });
+  /* 回数・セット数は打つたびに覚えておく。並べかえても消えない */
+  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-rp]'),function(b){
+    b.addEventListener('input',function(){ setRep(b.dataset.rp,'reps',b.value); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#selList [data-rs]'),function(b){
+    b.addEventListener('input',function(){ setRep(b.dataset.rs,'sets',b.value); });
+  });
+}
+
+/* 打った回数を覚える。保存は「この内容で出す」でまとめて */
+function setRep(id, key, val){
+  S.reps = S.reps || {};
+  S.reps[id] = S.reps[id] || { reps:'', sets:'' };
+  S.reps[id][key] = String(val||'').trim();
+}
+
+/* 並べかえ。ひとつ上／ひとつ下へ */
+function moveSel(i, d){
+  var j = i + d;
+  if(i<0 || j<0 || i>=S.sel.length || j>=S.sel.length) return;
+  var t = S.sel[i]; S.sel[i] = S.sel[j]; S.sel[j] = t;
+  renderSel();
+}
+
+/* 足すときは、緩める→伸ばす→支える→鍛える の並びに収まる場所へ入れる。
+ * 並びを変えたければ、あとから↑↓で動かせる */
+function addToSel(id){
+  if(S.sel.indexOf(id)>=0){ toast('もう入っています'); return; }
+  var r = PH_NO[(S.selInfo[id]||{}).phase||''] || 99;
+  var at = S.sel.length;
+  for(var i=0;i<S.sel.length;i++){
+    var ri = PH_NO[(S.selInfo[S.sel[i]]||{}).phase||''] || 99;
+    if(ri > r){ at = i; break; }
+  }
+  S.sel.splice(at, 0, id);
+  renderSel();
+  toast((at+1)+'番目に足しました');
+}
+
+/* 写真の入れかえ。変な写真が混ざっていたら、その1枚だけ消せる */
+function togglePhotoEdit(id){
+  var box = $('phedit-'+id);
+  if(!box) return;
+  if(box.innerHTML){ box.innerHTML=''; return; }
+  drawPhotoEdit(id);
+}
+
+function drawPhotoEdit(id){
+  var box = $('phedit-'+id);
+  if(!box) return;
+  var ps = (S.selInfo[id]||{}).photos || [];
+  if(!ps.length){
+    box.innerHTML='<div class="ph-edit"><div class="ex-body">この種目に写真はありません</div></div>';
+    return;
+  }
+  var h='<div class="ph-edit"><div class="ex-body"><b>'+esc(id)+'</b> の写真です。'+
+        'いらないものは × で消せます。<br>マスターから消えるので、ほかの受講生の画面でも消えます</div><div class="shots">';
+  ps.forEach(function(u,i){
+    h+='<div class="shot"><img src="'+esc(thumb(u,300))+'" loading="lazy" decoding="async" alt="">'+
+       '<span class="n">'+(i+1)+'</span>'+
+       '<button class="x" data-ph="'+esc(id)+'" data-i="'+i+'">×</button></div>';
+  });
+  h+='</div></div>';
+  box.innerHTML=h;
+  Array.prototype.forEach.call(box.querySelectorAll('[data-ph]'),function(b){
+    b.addEventListener('click',function(){ delPhoto(b.dataset.ph, Number(b.dataset.i), b); });
+  });
+}
+
+function delPhoto(id, i, btn){
+  if(!confirm(id+' の '+(i+1)+'枚目を消します。元に戻せません。よろしいですか？')) return;
+  btn.disabled = true;
+  api('coachDelPhoto',{data:{exId:id, index:i}}).then(function(r){
+    if(S.selInfo[id] && S.selInfo[id].photos) S.selInfo[id].photos.splice(i,1);
+    toast('消しました。のこり '+r.left+'枚');
+    renderSel();
+    drawPhotoEdit(id);
+  }).catch(function(e){
+    btn.disabled = false;
+    toast('消せませんでした：'+String(e.message||e));
   });
 }
 
@@ -928,16 +1268,15 @@ function doFind(){
                     : '<div class="empty">見つかりませんでした</div>';
     r.items.forEach(function(x){
       S.selInfo[x.id]=x;
-      h+='<div class="row-ex">'+(x.photos.length?'<img src="'+esc(x.photos[0])+'" loading="lazy" alt="">':'')+
-         '<div class="tx"><b>'+esc(x.id)+'</b>　'+esc(x.how)+'</div>'+
+      h+='<div class="row-ex">'+
+         (x.photos.length?'<img src="'+esc(thumb(x.photos[0],160))+'" loading="lazy" decoding="async" alt="">':'')+
+         '<div class="tx">'+(x.phase?'<span class="ph-tag">'+esc(x.phase)+'</span>':'')+
+         '<b>'+esc(x.id)+'</b>　'+esc(x.how)+'</div>'+
          '<button class="mini fill" data-add="'+esc(x.id)+'">足す</button></div>';
     });
     $('found').innerHTML=h;
     Array.prototype.forEach.call(document.querySelectorAll('#found [data-add]'),function(b){
-      b.addEventListener('click',function(){
-        if(S.sel.indexOf(b.dataset.add)<0){ S.sel.push(b.dataset.add); renderSel(); toast('足しました'); }
-        else toast('もう入っています');
-      });
+      b.addEventListener('click',function(){ addToSel(b.dataset.add); });
     });
   }).catch(function(){ $('found').innerHTML='<div class="empty">さがせませんでした</div>'; });
 }
@@ -1017,8 +1356,9 @@ function saveNewEx(){
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function alert2(msg){ toast(msg); }
 
-/* 起動 */
-boot();
+/* 起動。defer の SDK が読み終わったあとに動く */
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
 </script>
 </body>
 </html>
