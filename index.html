@@ -195,6 +195,35 @@
   .ex-tips{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:14px;line-height:1.6;
            background:var(--accent-weak);color:var(--ink);white-space:pre-wrap;}
   .ex-tips b{color:var(--accent);}
+  /* カンペの画面は横に広く使う */
+  body.wide main{max-width:1400px;}
+
+  /* カンペ。1行＝1種目。縦にスワイプして見る */
+  .cheat{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card);}
+  .cheat-sec{padding:9px 13px;background:var(--accent-weak);font-weight:700;font-size:14px;}
+  .cheat-row{display:flex;align-items:flex-start;gap:11px;padding:11px 13px;
+             border-top:1px solid var(--line);font-size:14px;line-height:1.55;}
+  .c-no{flex:0 0 22px;text-align:right;color:var(--sub);font-weight:700;font-size:13px;padding-top:3px;}
+  .c-ph{flex:0 0 220px;display:flex;gap:5px;}   /* 写真が1枚でも列は揃える */
+  .c-ph img{width:70px;height:70px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block;}
+  .c-ph .noimg{width:70px;height:70px;border-radius:8px;border:1px dashed var(--line);}
+  .c-id{flex:0 0 76px;padding-top:2px;}
+  .c-id b{display:block;font-size:14px;}
+  .c-id span{font-size:11px;color:var(--sub);}
+  .c-how{flex:1 1 230px;min-width:150px;white-space:pre-wrap;}
+  .c-rep{flex:0 0 92px;text-align:right;font-weight:700;padding-top:2px;}
+  .c-tx{flex:1 1 250px;min-width:160px;}
+  .c-tips{padding:6px 9px;border-radius:7px;background:var(--accent-weak);white-space:pre-wrap;}
+  .c-note{padding:6px 9px;border-radius:7px;background:#fff8dc;border:1px solid #e8d08a;
+          color:#5c4a00;white-space:pre-wrap;margin-top:5px;}
+  .c-none{color:var(--sub);opacity:.6;font-size:13px;}
+  /* 画面がせまいときは、やり方とメモを下の段へ回す */
+  @media(max-width:760px){
+    .cheat-row{flex-wrap:wrap;}
+    .c-how{flex:1 1 100%;order:5;}
+    .c-tx{flex:1 1 100%;order:6;}
+  }
+
   /* 指導中のカンペ。まっすーが見ているときだけ出る */
   .ex-note{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:14px;line-height:1.65;
            background:#fff8dc;border:1px solid #e8d08a;color:#5c4a00;white-space:pre-wrap;}
@@ -1101,6 +1130,7 @@ function loadCoach(){
 }
 
 function renderCoachHome(){
+  document.body.classList.remove('wide');
   var d=S.coach;
   var h='<div class="card"><h2>だれに出しますか</h2>';
   if(!d.students.length) h+='<div class="empty">まだ受講生がいません</div>';
@@ -1169,7 +1199,8 @@ function renderAssign(){
   var h='<div class="card"><div class="hw-head"><span class="hw-set">'+esc(me.name||'')+'</span>'+
         '<span class="hw-given">いま '+selCount()+' 種目'+
         (S.menus.length>1?'／'+S.menus.length+'メニュー':'')+'</span></div>'+
-        '<button class="mini" id="btnBack">← 一覧へもどる</button></div>';
+        '<div class="pick"><button class="mini" id="btnBack">← 一覧へもどる</button>'+
+        '<button class="mini fill" id="btnCheat">カンペを見る</button></div></div>';
 
   h+='<div class="card"><h2>セットから出す</h2><div class="pick">'+
      '<select id="setSel"><option value="">選んでください</option>';
@@ -1204,6 +1235,7 @@ function renderAssign(){
   $('view-coach').innerHTML=h;
   renderSel();
   $('btnBack').addEventListener('click', renderCoachHome);
+  $('btnCheat').addEventListener('click', renderCheat);
   $('btnSetAdd').addEventListener('click',function(){
     var n=$('setSel').value;
     if(!n){ toast('セットを選んでください'); return; }
@@ -1252,6 +1284,68 @@ function selAll(){
   return out;
 }
 function selCount(){ return selAll().length; }
+
+/* カンペ。1行＝1種目の横長。指導中はこれを別の画面に出しておく。
+ * 写真・やり方・回数・コツ・コーチ用メモが1行に並ぶ */
+function renderCheat(){
+  var d=S.target, c=S.coach;
+  var me=(c.students.filter(function(s){return s.lineId===d.lineId;})[0]||{});
+  document.body.classList.add('wide');
+
+  var h='<div class="card"><div class="hw-head">'+
+        '<span class="hw-set">'+esc(me.name||'')+' さん　カンペ</span>'+
+        '<span class="hw-given">'+selCount()+'種目'+
+          (S.menus.length>1?'／'+S.menus.length+'メニュー':'')+'</span></div>'+
+        '<button class="mini" id="btnCheatBack">← 出す内容にもどる</button></div>';
+
+  h+='<div class="cheat">';
+  var any=false;
+  S.menus.forEach(function(m, mi){
+    if(!m.ids.length) return;
+    any=true;
+    if(S.menus.length>1){
+      h+='<div class="cheat-sec">メニュー '+(mi+1)+(m.name?'　'+esc(m.name):'')+'　'+m.ids.length+'種目</div>';
+    }
+    m.ids.forEach(function(id,i){
+      var x=S.selInfo[id]||{};
+      var rp=(S.reps&&S.reps[id])||{};
+      var reps=rp.reps||x.baseReps||x.reps||'';
+      var sets=rp.sets||x.baseSets||x.sets||'';
+      var st=String(sets).trim();
+      var r=[]; if(reps) r.push(reps);
+      if(st && st!=='1' && st!=='1セット') r.push(st);
+
+      h+='<div class="cheat-row">'+
+         '<div class="c-no">'+(i+1)+'</div>'+
+         '<div class="c-ph">'+
+           ((x.photos&&x.photos.length)
+             ? x.photos.slice(0,3).map(function(u){
+                 return '<img src="'+esc(thumb(u,300))+'" loading="lazy" decoding="async" alt="">';
+               }).join('')
+             : '<div class="noimg"></div>')+
+         '</div>'+
+         '<div class="c-id"><b>'+esc(id)+'</b><span>'+esc(x.phase||'')+
+           (x.body?'<br>'+esc(x.body):'')+'</span></div>'+
+         '<div class="c-how">'+esc(x.how||'')+'</div>'+
+         '<div class="c-rep">'+esc(r.join(' × '))+'</div>'+
+         '<div class="c-tx">'+
+           (x.tips?'<div class="c-tips">'+esc(x.tips)+'</div>':'')+
+           (x.note?'<div class="c-note">'+esc(x.note)+'</div>':'')+
+           ((!x.tips&&!x.note)?'<div class="c-none">メモなし</div>':'')+
+         '</div>'+
+         '</div>';
+    });
+  });
+  if(!any) h+='<div class="cheat-row"><div class="c-none">まだ種目が入っていません</div></div>';
+  h+='</div>';
+
+  $('view-coach').innerHTML=h;
+  $('btnCheatBack').addEventListener('click',function(){
+    document.body.classList.remove('wide');
+    renderAssign();
+  });
+  window.scrollTo(0,0);
+}
 
 function renderSel(){
   if(!S.menus || !S.menus.length) S.menus=[{ name:'', ids:[] }];
