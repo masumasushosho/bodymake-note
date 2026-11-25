@@ -195,6 +195,11 @@
   .ex-tips{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:14px;line-height:1.6;
            background:var(--accent-weak);color:var(--ink);white-space:pre-wrap;}
   .ex-tips b{color:var(--accent);}
+  /* 指導中のカンペ。まっすーが見ているときだけ出る */
+  .ex-note{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:14px;line-height:1.65;
+           background:#fff8dc;border:1px solid #e8d08a;color:#5c4a00;white-space:pre-wrap;}
+  .ex-note::before{content:'コーチ用メモ（受講生には出ません）';display:block;
+                   font-size:11px;font-weight:700;opacity:.7;margin-bottom:4px;letter-spacing:.02em;}
   /* 今日のメニューの切り替え（メニューが2つ以上ある人だけ出る） */
   .mnav{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
   .mn{flex:0 0 auto;min-width:42px;height:38px;padding:0 10px;border:1px solid var(--line);
@@ -312,6 +317,7 @@
 <input type="file" id="filePick" accept="image/*" class="hidden">
 <input type="file" id="fileMulti" accept="image/*" multiple class="hidden">
 <input type="file" id="fileEx" accept="image/*" multiple class="hidden">
+<input type="file" id="fileAdd" accept="image/*" multiple class="hidden">
 
 <script>
 /* ================= 設定（増田さんが貼り替える2つ） ================= */
@@ -1006,6 +1012,8 @@ function exCard(x, today, done){
   }
   h+='<div class="ex-how">'+esc(x.how)+'</div>';
   if(x.tips) h+='<div class="ex-tips">'+esc(x.tips)+'</div>';
+  /* カンペ。サーバーが まっすー にしか送らないので、ここに来る時点で本人の画面 */
+  if(x.note) h+='<div class="ex-note">'+esc(x.note)+'</div>';
   h+='<div class="days one">';
   var on = !!done[x.id];
   h+='<button class="day'+(on?' on':'')+'" data-ex="'+esc(x.id)+'" data-date="'+esc(today)+'">'+
@@ -1439,24 +1447,86 @@ function togglePhotoEdit(id){
 function drawPhotoEdit(id){
   var box = $('phedit-'+id);
   if(!box) return;
-  var ps = (S.selInfo[id]||{}).photos || [];
-  if(!ps.length){
-    box.innerHTML='<div class="ph-edit"><div class="ex-body">この種目に写真はありません</div></div>';
-    return;
+  var x = S.selInfo[id] || {};
+  var ps = x.photos || [];
+  var h='<div class="ph-edit">';
+
+  h+='<div class="ex-body"><b>'+esc(id)+'</b> の写真。いらないものは × で消せます。<br>'+
+     'マスターから消えるので、ほかの受講生の画面でも消えます</div>';
+  if(ps.length){
+    h+='<div class="shots">';
+    ps.forEach(function(u,i){
+      h+='<div class="shot"><img src="'+esc(thumb(u,300))+'" loading="lazy" decoding="async" alt="">'+
+         '<span class="n">'+(i+1)+'</span>'+
+         '<button class="x" data-ph="'+esc(id)+'" data-i="'+i+'">×</button></div>';
+    });
+    h+='</div>';
+  } else {
+    h+='<div class="ex-body" style="opacity:.7">まだ写真はありません</div>';
   }
-  var h='<div class="ph-edit"><div class="ex-body"><b>'+esc(id)+'</b> の写真です。'+
-        'いらないものは × で消せます。<br>マスターから消えるので、ほかの受講生の画面でも消えます</div><div class="shots">';
-  ps.forEach(function(u,i){
-    h+='<div class="shot"><img src="'+esc(thumb(u,300))+'" loading="lazy" decoding="async" alt="">'+
-       '<span class="n">'+(i+1)+'</span>'+
-       '<button class="x" data-ph="'+esc(id)+'" data-i="'+i+'">×</button></div>';
-  });
-  h+='</div></div>';
+  if(ps.length < 5){
+    h+='<button class="mini fill" data-addph="'+esc(id)+'" style="margin-top:9px;">'+
+       '写真を足す（あと'+(5-ps.length)+'枚）</button>';
+  }
+
+  h+='<div class="field" style="margin-top:14px;"><label>コツ（受講生にも出ます）</label>'+
+     '<textarea data-tips="'+esc(id)+'" placeholder="意識するところ・注意点">'+esc(x.tips||'')+'</textarea></div>'+
+     '<div class="field"><label>コーチ用メモ（指導中のカンペ。受講生には出ません）</label>'+
+     '<textarea data-note="'+esc(id)+'" placeholder="見るところ・声かけ・よくある崩れかた・代わりにやってもらう種目 など">'+
+       esc(x.note||'')+'</textarea>'+
+     '<button class="mini" data-savenote="'+esc(id)+'" style="margin-top:6px;">コツとメモを保存</button></div>';
+  h+='</div>';
   box.innerHTML=h;
+
   Array.prototype.forEach.call(box.querySelectorAll('[data-ph]'),function(b){
     b.addEventListener('click',function(){ delPhoto(b.dataset.ph, Number(b.dataset.i), b); });
   });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-addph]'),function(b){
+    b.addEventListener('click',function(){
+      S.addPhotoFor = b.dataset.addph;
+      $('fileAdd').click();
+    });
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-savenote]'),function(b){
+    b.addEventListener('click',function(){
+      var k=b.dataset.savenote;
+      var tn=box.querySelector('[data-note="'+k+'"]');
+      var tt=box.querySelector('[data-tips="'+k+'"]');
+      var note=tn?tn.value:'', tips=tt?tt.value:'';
+      b.disabled=true; b.textContent='保存しています…';
+      api('coachSetNote',{data:{exId:k, note:note, tips:tips}}).then(function(){
+        if(S.selInfo[k]){ S.selInfo[k].note=note; S.selInfo[k].tips=tips; }
+        toast('保存しました');
+      }).catch(function(e){ toast(String(e.message||'保存できませんでした')); })
+      .then(function(){ b.disabled=false; b.textContent='コツとメモを保存'; });
+    });
+  });
 }
+
+/* すでにある種目に写真を足す。スプレッドシートに貼らなくていい */
+$('fileAdd').addEventListener('change',function(){
+  var files=Array.prototype.slice.call(this.files);
+  this.value='';
+  var id=S.addPhotoFor;
+  if(!id || !files.length) return;
+  var have=((S.selInfo[id]||{}).photos||[]).length;
+  var room=5-have;
+  if(room<=0){ toast('写真は5枚までです'); return; }
+
+  toast('写真を送っています…');
+  var out=[], chain=Promise.resolve();
+  files.slice(0,room).forEach(function(f){
+    chain=chain.then(function(){ return shrink(f).then(function(b){ out.push(b.base64); }); });
+  });
+  chain.then(function(){
+    return api('coachAddPhoto',{data:{exId:id, photos:out}});
+  }).then(function(r){
+    if(S.selInfo[id]) S.selInfo[id].photos=r.photos;
+    toast(r.added+'枚 足しました');
+    renderSel();
+    togglePhotoEdit(id);
+  }).catch(function(e){ toast(String(e.message||'足せませんでした')); });
+});
 
 function delPhoto(id, i, btn){
   if(!confirm(id+' の '+(i+1)+'枚目を消します。元に戻せません。よろしいですか？')) return;
@@ -1515,7 +1585,12 @@ function renderNewEx(){
     c.bodies.forEach(function(x){ h+='<option>'+esc(x)+'</option>'; });
     h+='</select>';
   });
-  h+='</div></div><button class="btn-save" id="btnSaveEx" style="margin-top:12px;">この種目を登録する</button></div>';
+  h+='</div></div>'+
+     '<div class="field"><label>コツ（受講生にも出ます）</label>'+
+     '<textarea id="nTips" placeholder="意識するところ・注意点"></textarea></div>'+
+     '<div class="field"><label>コーチ用メモ（指導中のカンペ。受講生には出ません）</label>'+
+     '<textarea id="nNote" placeholder="見るところ・声かけ・よくある崩れかた・代わりにやってもらう種目 など"></textarea></div>'+
+     '<button class="btn-save" id="btnSaveEx" style="margin-top:12px;">この種目を登録する</button></div>';
   $('view-coach').innerHTML=h;
   $('btnBack2').addEventListener('click', renderCoachHome);
   $('btnPickEx').addEventListener('click',function(){ $('fileEx').click(); });
@@ -1554,6 +1629,7 @@ function saveNewEx(){
   api('coachAddEx',{data:{
     how:how, reps:$('nReps').value, sets:$('nSets').value,
     phase:$('nPhase').value, body:$('nBody').value, sub:sub,
+    tips:$('nTips').value, note:$('nNote').value,
     photos:(S.newPhotos||[]).map(function(b){ return b.base64; })
   }}).then(function(r){
     toast(r.id+' で登録しました');
