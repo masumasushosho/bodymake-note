@@ -1442,8 +1442,12 @@ function renderAssign(){
     toast('メニュー'+S.menus.length+'を足しました。ここに種目を入れてください');
   });
   $('btnSort').addEventListener('click',function(){
+    if(S.cur==null || S.cur>=S.menus.length) S.cur = 0;
     var m = S.menus[S.cur];
-    if(!m || !m.ids.length){ toast('並べかえる種目がありません'); return; }
+    if(!m || !m.ids.length){
+      toast((S.menus.length>1?'メニュー'+(S.cur+1)+'に':'')+'並べかえる種目がありません');
+      return;
+    }
     m.ids = m.ids.slice().map(function(id,i){
       var p = (S.selInfo[id]||{}).phase || '';
       return { id:id, i:i, r:(PH_NO[p] || 99) };
@@ -1536,6 +1540,11 @@ function renderCheat(){
 }
 
 function renderSel(){
+  /* 前のドラッグの名残を消す。残っていると、そのメニューが押せない */
+  Array.prototype.forEach.call(document.querySelectorAll('.dragging,.droptarget'),
+    function(e){ e.classList.remove('dragging'); e.classList.remove('droptarget'); });
+  var gh=document.querySelector('.dragghost');
+  if(gh && gh.parentNode) gh.parentNode.removeChild(gh);
   if(!S.menus || !S.menus.length) S.menus=[{ name:'', ids:[] }];
   var many = S.menus.length>1;
   var h='';
@@ -1646,6 +1655,9 @@ function bindSel(){
    ⠿（種目の左）… その種目を動かす。別のメニューへ移してもよい
    ⠿（メニューの見出し）… メニューをまるごと動かす（順ぐりに出る順が変わる） */
 function bindDrag(box){
+  if(box.__dragHooked) return;        /* 描き直すたびに増やさない。
+                                         増えると dragging が外れず、押せなくなる */
+  box.__dragHooked = true;
   var drag=null, kind=null, fromBox=null;
 
   function isWide(){ return window.innerWidth > 860; }  /* パソコンの幅なら横並び */
@@ -1715,6 +1727,9 @@ function bindDrag(box){
   }
   box.addEventListener('pointerup', end);
   box.addEventListener('pointercancel', end);
+  /* 箱の外で指を離したときも必ず終わらせる。終わらないと押せなくなる */
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
 }
 
 /* さがした一覧から、メニューの箱へドラッグして入れる。
@@ -1767,6 +1782,7 @@ function bindFindDrag(){
     if(ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
     ghost=null; id=null; clearMark(); lastBox=null;
   });
+  window.addEventListener('pointerup', function(e){ if(id) end(e); });
 }
 
 /* 画面に並んでいるメニューの順番を、持っているデータへ写す */
