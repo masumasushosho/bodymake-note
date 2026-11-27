@@ -278,6 +278,7 @@
   .logk{flex:0 0 72px;font-size:12px;color:#888;padding-top:2px;}
   .logv{flex:1;font-size:14px;line-height:1.6;white-space:pre-wrap;}
   .logsub{font-size:12px;color:#999;margin-top:4px;}
+  .logago{margin-left:8px;font-size:11px;font-weight:400;color:var(--accent);}
   .mn{flex:0 0 auto;min-width:42px;height:38px;padding:0 10px;border:1px solid var(--line);
       background:#fff;border-radius:10px;font-size:15px;font-weight:700;color:var(--sub);cursor:pointer;}
   .mn.td{border-color:var(--accent);border-width:2px;}
@@ -756,14 +757,12 @@ function renderRecordLog(d){
   var open = S.logOpen ? days : days.slice(0,5);
   var h='<div class="card"><h2>これまで書いたこと</h2>';
   open.forEach(function(x){
-    h+='<div class="logday"><div class="logdate">'+esc(mmdd(x.date))+'</div>';
+    h+='<div class="logday"><div class="logdate">'+esc(mmdd(x.date))+
+       '<span class="logago">'+esc(daysAgo(x.date))+'</span></div>';
     if(x.did)  h+='<div class="logrow"><span class="logk">できたこと</span><span class="logv">'+esc(x.did)+'</span></div>';
     if(x.plan) h+='<div class="logrow"><span class="logk">明日やる</span><span class="logv">'+esc(x.plan)+'</span></div>';
-    var sub=[];
-    if(x.weight!=='' && x.weight!=null) sub.push(x.weight+'kg');
-    if(x.steps!=='' && x.steps!=null) sub.push(x.steps+'歩');
-    if(x.exercise) sub.push('運動 '+x.exercise);
-    if(sub.length) h+='<div class="logsub">'+esc(sub.join('　'))+'</div>';
+    var bl=bodyLine(x);
+    if(bl) h+='<div class="logsub">'+esc(bl)+'</div>';
     h+='</div>';
   });
   if(days.length>5){
@@ -1071,6 +1070,33 @@ function mmdd(iso){
   var d=new Date(Number(p[0]), Number(p[1])-1, Number(p[2]));
   return Number(p[1])+'/'+Number(p[2])+'（'+WD_J[d.getDay()]+'）';
 }
+/* 今日から数えて何日前か。日付だけだと遡りにくいので添える */
+function daysAgo(iso){
+  if(!iso) return '';
+  var p=String(iso).split('-'); if(p.length<3) return '';
+  var t=new Date(); t.setHours(0,0,0,0);
+  var d=new Date(Number(p[0]), Number(p[1])-1, Number(p[2]));
+  var n=Math.round((t-d)/86400000);
+  if(n<=0) return '今日';
+  if(n===1) return 'きのう';
+  if(n===2) return 'おととい';
+  if(n<7)  return n+'日前';
+  if(n<14) return '1週間前';
+  if(n<31) return Math.floor(n/7)+'週間前';
+  return Math.floor(n/30)+'ヶ月前';
+}
+/* その日の数字を1行にまとめる */
+function bodyLine(x){
+  var a=[];
+  if(x.weight!=='' && x.weight!=null) a.push('体重 '+x.weight+'kg');
+  if(x.waist!=='' && x.waist!=null)   a.push('ウエスト '+x.waist+'cm');
+  if(x.thighR!=='' && x.thighR!=null) a.push('右もも '+x.thighR+'cm');
+  if(x.thighL!=='' && x.thighL!=null) a.push('左もも '+x.thighL+'cm');
+  if(x.steps!=='' && x.steps!=null)   a.push(x.steps+'歩');
+  if(x.cond!=='' && x.cond!=null)     a.push('体調 '+x.cond);
+  if(x.exercise) a.push('運動 '+x.exercise);
+  return a.join('　');
+}
 function renderLog(d){
   var days=(d&&d.days)||[];
   var box=$('logbox');
@@ -1085,14 +1111,12 @@ function renderLog(d){
   }
   var h='<div class="card"><h2>書いたことの読み返し　<span class="muted num">'+days.length+'日分</span></h2>';
   days.forEach(function(x){
-    h+='<div class="logday"><div class="logdate">'+esc(mmdd(x.date))+'</div>';
+    h+='<div class="logday"><div class="logdate">'+esc(mmdd(x.date))+
+       '<span class="logago">'+esc(daysAgo(x.date))+'</span></div>';
     if(x.did)  h+='<div class="logrow"><span class="logk">できたこと</span><span class="logv">'+esc(x.did)+'</span></div>';
     if(x.plan) h+='<div class="logrow"><span class="logk">明日やる</span><span class="logv">'+esc(x.plan)+'</span></div>';
-    var sub=[];
-    if(x.weight!=='' && x.weight!=null) sub.push(x.weight+'kg');
-    if(x.steps!=='' && x.steps!=null) sub.push(x.steps+'歩');
-    if(x.exercise) sub.push('運動'+x.exercise);
-    if(sub.length) h+='<div class="logsub">'+esc(sub.join('　'))+'</div>';
+    var bl=bodyLine(x);
+    if(bl) h+='<div class="logsub">'+esc(bl)+'</div>';
     h+='</div>';
   });
   h+='</div>';
