@@ -207,6 +207,12 @@
   .mgrip{flex:0 0 auto;width:30px;height:30px;padding:0;font-size:16px;line-height:1;
          cursor:grab;touch-action:none;}
   .mblock.dragging{opacity:.6;pointer-events:none;}
+  .mblock.droptarget{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;}
+  .dragghost{position:fixed;z-index:50;transform:translate(-50%,-140%);pointer-events:none;
+             background:var(--accent);color:#fff;font-size:13px;font-weight:700;
+             padding:5px 10px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.25);}
+  .findrow{border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:6px;}
+  .findrow .exshots{margin-left:34px;}
   .mblock.dragging .mhead{background:var(--accent-weak);border-radius:8px;}
   .mbox{min-height:54px;}
   /* 種目の写真。1枚だと動きが分からないので、ある分だけ小さく並べる */
@@ -412,7 +418,24 @@ function toast(msg){
   var t=$('toast'); t.textContent=msg; t.classList.add('show');
   clearTimeout(toast._t); toast._t=setTimeout(function(){ t.classList.remove('show'); },1800);
 }
+/* 最後に見ていた画面を覚えておく。開き直したとき同じところへ戻るため */
+function rememberView(name, lineId){
+  try{
+    localStorage.setItem('bm_view', JSON.stringify({
+      v: name, s: lineId || (S.target && S.target.lineId) || '', t: Date.now()
+    }));
+  }catch(e){}
+}
+function lastView(){
+  try{
+    var o = JSON.parse(localStorage.getItem('bm_view') || 'null');
+    if(!o || !o.v) return null;
+    if(Date.now() - (o.t||0) > 12*3600*1000) return null;   /* 12時間で忘れる */
+    return o;
+  }catch(e){ return null; }
+}
 function showView(name){
+  S.view = name;
   ['record','photo','karte','trend','homework','coach'].forEach(function(v){
     $('view-'+v).classList.toggle('hidden', v!==name);
   });
@@ -460,11 +483,29 @@ function applyBoot(d){
   S.hw=d.homework||null;
   S.yesterdayPlan=d.yesterdayPlan||null;   /* 前に書いた「明日やること」 */
   if(S.isCoach) $('btnCoach').classList.remove('hidden');
+  S.bootDone = true;
   $('hello').textContent = S.name ? (S.name+' さん') : 'ようこそ';
   /* 打ちはじめていたら書き換えない。数字を消してしまわないため */
   if(!S.dirty) renderRecord(d.todayDiary);
   $('loading').classList.add('hidden');
-  if(!S.tabsReady){ setupTabs(); showView('record'); S.tabsReady=true; }
+  if(!S.tabsReady){
+    S.tabsReady=true;
+    setupTabs();
+    var lv = lastView();
+    if(lv && lv.v==='coach' && S.isCoach){
+      loadCoach();
+      if(lv.s) S.wantStudent = lv.s;        /* 受講生の画面まで戻す */
+      showView('coach');
+    }else if(lv && ['record','homework','photo','trend','karte'].indexOf(lv.v)>=0){
+      if(lv.v==='photo') loadPhotos(S.round);
+      if(lv.v==='homework') loadHomework();
+      if(lv.v==='karte') loadKarte();
+      if(lv.v==='trend') loadTrend();
+      showView(lv.v);
+    }else{
+      showView('record');
+    }
+  }
 }
 
 function boot(){
@@ -525,6 +566,7 @@ function setupTabs(){
       if(v==='karte') loadKarte();
       if(v==='trend') loadTrend();
       showView(v);
+      rememberView(v);
     });
   });
 }
@@ -1214,14 +1256,31 @@ function bindDays(d, list, today){
 /* ============================================================
  * 画面5：まっすー用（宿題を出す／種目を足す）
  * ============================================================ */
+function coachCacheRead(){
+  try{ return JSON.parse(localStorage.getItem('bm_coach')||'null'); }catch(e){ return null; }
+}
+function coachCacheWrite(d){
+  try{ localStorage.setItem('bm_coach', JSON.stringify(d)); }catch(e){}
+}
 function loadCoach(){
-  $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
-  api('coachHome',{}).then(function(d){ S.coach=d; renderCoachHome(); })
-    .catch(function(e){ $('view-coach').innerHTML='<div class="empty">'+esc(String(e.message||e))+'</div>'; });
+  /* 前に見た一覧をすぐ出す。待たせないため。届いたら中身を入れ替える */
+  var c = coachCacheRead();
+  if(c && c.students){ S.coach=c; renderCoachHome(); }
+  else $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
+  api('coachHome',{}).then(function(d){
+    S.coach=d; coachCacheWrite(d);
+    /* 受講生の画面を開いている最中なら、一覧で描き直さない */
+    if(S.wantStudent){ var w=S.wantStudent; S.wantStudent=null; openStudent(w); return; }
+    if(S.view==='coach' && !S.target) renderCoachHome();
+  }).catch(function(e){
+    if(!c) $('view-coach').innerHTML='<div class="empty">'+esc(String(e.message||e))+'</div>';
+  });
 }
 
 function renderCoachHome(){
   document.body.classList.remove('wide');
+  S.target=null;
+  rememberView('coach', '');
   var d=S.coach;
   var h='<div class="card"><h2>だれに出しますか</h2>';
   if(!d.students.length) h+='<div class="empty">まだ受講生がいません</div>';
@@ -1269,7 +1328,38 @@ function inviteStudent(){
   });
 }
 
+function stuCacheRead(id){
+  try{ return JSON.parse(localStorage.getItem('bm_stu_'+id)||'null'); }catch(e){ return null; }
+}
+function stuCacheWrite(id, d){
+  try{ localStorage.setItem('bm_stu_'+id, JSON.stringify(d)); }catch(e){}
+}
+function applyStudent(d, fromCache){
+  S.target=d; S.selInfo={};
+  d.items.forEach(function(x){ S.selInfo[x.id]=x; });
+  S.menus = (d.menus && d.menus.length)
+    ? d.menus.map(function(m){ return { name:m.name||'', ids:(m.ids||[]).slice() }; })
+    : [{ name:'', ids:[] }];
+  if(S.cur==null || S.cur>=S.menus.length) S.cur = 0;
+  S.reps = d.reps || {};
+  renderAssign();
+  rememberView('coach', d.lineId);
+}
 function openStudent(lineId){
+  /* 前に開いた中身があれば先に出す。通信が終わったら入れ替える */
+  var c = stuCacheRead(lineId);
+  if(c && c.items){ S.cur=0; applyStudent(c, true); }
+  else $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
+  api('coachOpen',{data:{lineId:lineId}}).then(function(d){
+    stuCacheWrite(lineId, d);
+    /* 前に出した中身と同じなら描き直さない。打ちかけの数字を消さないため */
+    if(c && JSON.stringify(c.menus)===JSON.stringify(d.menus)
+         && JSON.stringify(c.reps)===JSON.stringify(d.reps)) return;
+    applyStudent(d, false);
+  }).catch(function(){ if(!c){ toast('開けませんでした'); renderCoachHome(); } });
+  return;
+}
+function openStudentOld(lineId){
   $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
   api('coachOpen',{data:{lineId:lineId}}).then(function(d){
     S.target=d; S.selInfo={};
@@ -1627,6 +1717,58 @@ function bindDrag(box){
   box.addEventListener('pointercancel', end);
 }
 
+/* さがした一覧から、メニューの箱へドラッグして入れる。
+   行そのものは動かさない。指の下に小さな札を出して、落ちた先のメニューへ足す */
+function bindFindDrag(){
+  var box=$('found'); if(!box || box.__dragHooked) return;
+  box.__dragHooked = true;
+  var id=null, ghost=null, lastBox=null;
+
+  function clearMark(){
+    Array.prototype.forEach.call(document.querySelectorAll('.mblock.droptarget'),
+      function(e){ e.classList.remove('droptarget'); });
+  }
+  box.addEventListener('pointerdown',function(e){
+    var g=e.target&&e.target.closest?e.target.closest('[data-fgrip]'):null;
+    if(!g) return;
+    e.preventDefault();
+    id=g.dataset.fgrip;
+    ghost=document.createElement('div');
+    ghost.className='dragghost';
+    ghost.textContent=id;
+    document.body.appendChild(ghost);
+    ghost.style.left=e.clientX+'px'; ghost.style.top=e.clientY+'px';
+    try{ g.setPointerCapture(e.pointerId); }catch(err){}
+  });
+  box.addEventListener('pointermove',function(e){
+    if(!id) return;
+    e.preventDefault();
+    if(ghost){ ghost.style.left=e.clientX+'px'; ghost.style.top=e.clientY+'px'; }
+    if(e.clientY < 96) window.scrollBy(0,-16);
+    else if(e.clientY > window.innerHeight-96) window.scrollBy(0,16);
+    var el=document.elementFromPoint(e.clientX, e.clientY);
+    var mb=el&&el.closest?el.closest('.mblock'):null;
+    if(mb!==lastBox){ clearMark(); if(mb) mb.classList.add('droptarget'); lastBox=mb; }
+  });
+  function end(e){
+    if(!id) return;
+    var drop=lastBox;
+    if(ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+    ghost=null; clearMark(); lastBox=null;
+    var theId=id; id=null;
+    if(!drop) return;                      /* メニューの外で離したら何もしない */
+    var mi=Number(drop.dataset.mi);
+    if(isNaN(mi)) return;
+    S.cur=mi;
+    addToSel(theId);
+  }
+  box.addEventListener('pointerup', end);
+  box.addEventListener('pointercancel', function(){
+    if(ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+    ghost=null; id=null; clearMark(); lastBox=null;
+  });
+}
+
 /* 画面に並んでいるメニューの順番を、持っているデータへ写す */
 function commitMenuOrder(){
   var box=$('selList'); if(!box) return;
@@ -1797,16 +1939,26 @@ function doFind(){
                     : '<div class="empty">見つかりませんでした</div>';
     r.items.forEach(function(x){
       S.selInfo[x.id]=x;
-      h+='<div class="row-ex">'+
-         (x.photos.length?'<img src="'+esc(thumb(x.photos[0],160))+'" loading="lazy" decoding="async" alt="">':'')+
+      h+='<div class="findrow" data-fid="'+esc(x.id)+'"><div class="row-ex">'+
+         '<button class="grip" data-fgrip="'+esc(x.id)+'" '+
+           'title="押したまま動かすとメニューへ入れられます">⠿</button>'+
          '<div class="tx">'+(x.phase?'<span class="ph-tag">'+esc(x.phase)+'</span>':'')+
          '<b>'+esc(x.id)+'</b>　'+esc(x.how)+'</div>'+
          '<button class="mini fill" data-add="'+esc(x.id)+'">足す</button></div>';
+      if(x.photos && x.photos.length){
+        h+='<div class="exshots">';
+        x.photos.slice(0,5).forEach(function(u){
+          h+='<img src="'+esc(thumb(u,160))+'" loading="lazy" decoding="async" alt="">';
+        });
+        h+='</div>';
+      }
+      h+='</div>';
     });
     $('found').innerHTML=h;
     Array.prototype.forEach.call(document.querySelectorAll('#found [data-add]'),function(b){
       b.addEventListener('click',function(){ addToSel(b.dataset.add); });
     });
+    bindFindDrag();
   }).catch(function(){ $('found').innerHTML='<div class="empty">さがせませんでした</div>'; });
 }
 
