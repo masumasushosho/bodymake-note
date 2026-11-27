@@ -198,6 +198,23 @@
   /* カンペの画面は横に広く使う */
   body.wide main{max-width:1400px;}
 
+  /* 宿題を組む画面。パソコンではメニューを横に並べる（縦長だと見にくい） */
+  #selList{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;
+           padding:2px 2px 10px;scroll-snap-type:x proximity;}
+  #selList > .mblock{flex:0 0 330px;scroll-snap-align:start;}
+  #selList > #btnMenuAdd{flex:0 0 150px;align-self:stretch;min-height:110px;}
+  .mgrip{flex:0 0 auto;width:30px;height:30px;padding:0;font-size:16px;line-height:1;
+         cursor:grab;touch-action:none;}
+  .mblock.dragging{opacity:.6;pointer-events:none;}
+  .mblock.dragging .mhead{background:var(--accent-weak);border-radius:8px;}
+  .mbox{min-height:54px;}
+  /* 画面がせまいときは、今までどおり縦に積む */
+  @media(max-width:860px){
+    #selList{display:block;overflow-x:visible;}
+    #selList > .mblock{flex:none;}
+    #selList > #btnMenuAdd{min-height:0;}
+  }
+
   /* カンペ。1行＝1種目。縦にスワイプして見る */
   .cheat{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card);}
   .cheat-sec{padding:9px 13px;background:var(--accent-weak);font-weight:700;font-size:14px;}
@@ -1263,6 +1280,7 @@ function openStudent(lineId){
 }
 
 function renderAssign(){
+  document.body.classList.add('wide');   /* メニューを横に並べるので広く使う */
   var d=S.target, c=S.coach;
   var me=(c.students.filter(function(s){return s.lineId===d.lineId;})[0]||{});
   var h='<div class="card"><div class="hw-head"><span class="hw-set">'+esc(me.name||'')+'</span>'+
@@ -1410,7 +1428,6 @@ function renderCheat(){
 
   $('view-coach').innerHTML=h;
   $('btnCheatBack').addEventListener('click',function(){
-    document.body.classList.remove('wide');
     renderAssign();
   });
   window.scrollTo(0,0);
@@ -1423,6 +1440,8 @@ function renderSel(){
   S.menus.forEach(function(m, mi){
     h+='<div class="mblock'+(mi===S.cur?' cur':'')+'" data-mi="'+mi+'">'+
        '<div class="mhead">'+
+         (many?'<button class="grip mgrip" data-mgrip="'+mi+'" '+
+               'title="押したまま動かすとメニューごと並べかえ">⠿</button>':'')+
          '<span class="mt">'+(many?('メニュー '+(mi+1)):'メニュー')+'</span>'+
          '<input type="text" class="mname" data-mn="'+mi+'" value="'+esc(m.name||'')+'" '+
            'placeholder="なまえ（受講生には出ません）" autocapitalize="off" spellcheck="false">'+
@@ -1525,38 +1544,96 @@ function bindSel(){
   bindDrag(box);
 }
 
-/* つまみを押したまま動かして並べかえる。入れかえは同じメニューの中だけ */
+/* つまみを押したまま動かして並べかえる。
+   ⠿（種目の左）… その種目を動かす。別のメニューへ移してもよい
+   ⠿（メニューの見出し）… メニューをまるごと動かす（順ぐりに出る順が変わる） */
 function bindDrag(box){
-  var drag=null;
+  var drag=null, kind=null, fromBox=null;
+
+  function isWide(){ return window.innerWidth > 860; }  /* パソコンの幅なら横並び */
+
   box.addEventListener('pointerdown',function(e){
-    var g=e.target&&e.target.closest?e.target.closest('[data-grip]'):null;
-    if(!g) return;
+    var t=e.target;
+    var mg=t&&t.closest?t.closest('[data-mgrip]'):null;
+    var g =t&&t.closest?t.closest('[data-grip]') :null;
+    if(mg){
+      drag=mg.closest('.mblock'); kind='menu';
+    }else if(g){
+      drag=g.closest('.exrow');   kind='ex'; fromBox=drag?drag.parentNode:null;
+    }else return;
+    if(!drag){ kind=null; return; }
     e.preventDefault();
-    drag=g.closest('.exrow');
-    if(!drag) return;
     drag.classList.add('dragging');
-    try{ g.setPointerCapture(e.pointerId); }catch(err){}
+    try{ (mg||g).setPointerCapture(e.pointerId); }catch(err){}
   });
+
   box.addEventListener('pointermove',function(e){
     if(!drag) return;
     e.preventDefault();
     /* 画面の端まで来たら、少しずつ動かす */
     if(e.clientY < 96) window.scrollBy(0,-14);
     else if(e.clientY > window.innerHeight-96) window.scrollBy(0,14);
+    if(isWide()){
+      if(e.clientX < 70) box.scrollBy(-18,0);
+      else if(e.clientX > window.innerWidth-70) box.scrollBy(18,0);
+    }
     var el=document.elementFromPoint(e.clientX, e.clientY);
-    var over=el&&el.closest?el.closest('.exrow'):null;
-    if(!over || over===drag || over.parentNode!==drag.parentNode) return;
-    var r=over.getBoundingClientRect();
-    over.parentNode.insertBefore(drag, (e.clientY > r.top + r.height/2) ? over.nextSibling : over);
+    if(!el || !el.closest) return;
+
+    if(kind==='menu'){
+      var om=el.closest('.mblock');
+      if(!om || om===drag || om.parentNode!==drag.parentNode) return;
+      var rm=om.getBoundingClientRect();
+      var after = isWide() ? (e.clientX > rm.left + rm.width/2)
+                             : (e.clientY > rm.top  + rm.height/2);
+      om.parentNode.insertBefore(drag, after ? om.nextSibling : om);
+      return;
+    }
+
+    /* 種目。同じメニューの中でも、別のメニューへでも動かせる */
+    var over=el.closest('.exrow');
+    if(over && over!==drag){
+      var r=over.getBoundingClientRect();
+      over.parentNode.insertBefore(drag, (e.clientY > r.top + r.height/2) ? over.nextSibling : over);
+      return;
+    }
+    var ob=el.closest('.mbox');
+    if(ob && ob!==drag.parentNode){
+      var em=ob.querySelector('.empty');
+      if(em) em.parentNode.removeChild(em);
+      ob.appendChild(drag);
+    }
   });
+
   function end(){
     if(!drag) return;
+    var wasMenu = (kind==='menu');
+    var moved   = (kind==='ex' && fromBox && drag.parentNode!==fromBox);
     drag.classList.remove('dragging');
-    drag=null;
-    commitOrder();
+    drag=null; kind=null; fromBox=null;
+    commitOrder();                       /* 画面の並びをデータへ写す */
+    if(wasMenu) commitMenuOrder();       /* メニューの順番も入れ替える */
+    else if(moved) renderSel();          /* 別のメニューへ移したら番号と種目数を出し直す */
   }
   box.addEventListener('pointerup', end);
   box.addEventListener('pointercancel', end);
+}
+
+/* 画面に並んでいるメニューの順番を、持っているデータへ写す */
+function commitMenuOrder(){
+  var box=$('selList'); if(!box) return;
+  var cur = S.menus[S.cur];
+  var next = [];
+  Array.prototype.forEach.call(box.querySelectorAll('.mblock'),function(b){
+    var m = S.menus[Number(b.dataset.mi)];
+    if(m) next.push(m);
+  });
+  if(next.length !== S.menus.length) return;   /* 数が合わないときは触らない */
+  S.menus = next;
+  var at = S.menus.indexOf(cur);
+  S.cur = at >= 0 ? at : 0;
+  renderSel();
+  toast('メニューの順番を入れ替えました');
 }
 
 /* 画面の並びを、持っているデータへ写して番号を振り直す */
