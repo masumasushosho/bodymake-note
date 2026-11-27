@@ -231,6 +231,18 @@
                    font-size:11px;font-weight:700;opacity:.7;margin-bottom:4px;letter-spacing:.02em;}
   /* 今日のメニューの切り替え（メニューが2つ以上ある人だけ出る） */
   .mnav{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+  /* 前に書いた宣言 */
+  .yplan{border:1px solid #cfe3d4;background:#f3faf5;border-radius:10px;padding:10px 12px;margin:0 0 12px;}
+  .yplan-h{font-size:12px;color:#5b7a63;margin-bottom:4px;}
+  .yplan-b{font-size:15px;line-height:1.6;white-space:pre-wrap;}
+  /* 書いたことの読み返し */
+  .logday{border-top:1px solid #eee;padding:10px 0;}
+  .logday:first-of-type{border-top:0;}
+  .logdate{font-size:13px;font-weight:600;color:#666;margin-bottom:4px;}
+  .logrow{display:flex;gap:8px;margin:2px 0;}
+  .logk{flex:0 0 72px;font-size:12px;color:#888;padding-top:2px;}
+  .logv{flex:1;font-size:14px;line-height:1.6;white-space:pre-wrap;}
+  .logsub{font-size:12px;color:#999;margin-top:4px;}
   .mn{flex:0 0 auto;min-width:42px;height:38px;padding:0 10px;border:1px solid var(--line);
       background:#fff;border-radius:10px;font-size:15px;font-weight:700;color:var(--sub);cursor:pointer;}
   .mn.td{border-color:var(--accent);border-width:2px;}
@@ -424,6 +436,7 @@ function applyBoot(d){
   S.name=d.name||''; S.shootDates=d.shootDates||[]; S.isCoach=!!d.isCoach;
   S.today=d.today||todayLocal();
   S.hw=d.homework||null;
+  S.yesterdayPlan=d.yesterdayPlan||null;   /* 前に書いた「明日やること」 */
   if(S.isCoach) $('btnCoach').classList.remove('hidden');
   $('hello').textContent = S.name ? (S.name+' さん') : 'ようこそ';
   /* 打ちはじめていたら書き換えない。数字を消してしまわないため */
@@ -501,7 +514,7 @@ function setupTabs(){
    朝 … 起きてすぐ測るもの（夜に測ると数字がブレる）
    夜 … 1日が終わらないと決まらないもの */
 var PART_AM = ['体重','ウエスト','右もも','左もも','歩数','体調'];
-var PART_PM = ['カテ1','カテ2','カテ3','運動','その日の気づき'];
+var PART_PM = ['カテ1','カテ2','カテ3','運動','その日の気づき','明日やること'];
 var PART_LABEL = { am:'朝', pm:'夜', all:'ぜんぶ' };
 
 /* いま朝の画面か夜の画面か。URLの ?t=am / ?t=pm が最優先、無ければ時刻で決める */
@@ -554,6 +567,12 @@ function renderRecord(diary){
   }
   if(part==='pm'){
     html+='<div class="tip">1日おつかれさまでした。今日できたことを、ひとつでも書き残しておきましょう</div>';
+    /* 前に書いた宣言を先に見せる。自分が何を決めたか思い出してから書いてもらう */
+    var yp = S.yesterdayPlan;
+    if(yp && yp.plan){
+      html+='<div class="yplan"><div class="yplan-h">'+esc(mmdd(yp.date))+'に決めたこと</div>'+
+            '<div class="yplan-b">'+esc(yp.plan)+'</div></div>';
+    }
   }
 
   RECORD_FIELDS.forEach(function(f){
@@ -583,10 +602,15 @@ function renderRecord(diary){
       '<div class="choice" data-val="した">した</div><div class="choice" data-val="していない">していない</div></div>'+
       '<div class="note">完全にゼロの日は作らないようにしましょう。1分のストレッチでも「した」でOKです</div></div>';
   }
-  // 気づき
+  // 今日できたこと（LINEの振り返りフォームと同じ問い）
   if(inPart('その日の気づき')){
-    html+='<div class="field"><label>その日の気づき</label>'+
+    html+='<div class="field"><label>今日できたこと、意識したこと</label>'+
       '<textarea id="rec_気づき" placeholder="ひとことでもOKです">'+esc(diary['その日の気づき']||'')+'</textarea></div>';
+  }
+  // 明日やること
+  if(inPart('明日やること')){
+    html+='<div class="field"><label>明日はどんなことにチャレンジしますか</label>'+
+      '<textarea id="rec_明日" placeholder="小さなことで大丈夫です">'+esc(diary['明日やること']||'')+'</textarea></div>';
   }
   html+='</div>';
   $('view-record').innerHTML=html;
@@ -640,6 +664,7 @@ function saveRecord(){
   if($('rec_体調')) data['体調']=selected('rec_体調');
   if($('rec_運動')) data['運動']=selected('rec_運動');
   if($('rec_気づき')) data['その日の気づき']=$('rec_気づき').value;
+  if($('rec_明日')) data['明日やること']=$('rec_明日').value;
   S.dirty = false;                       /* 保存できたら、また最新で描き換えてよい */
   api('saveDaily',{data:data}).then(function(){
     toast('保存しました'); btn.disabled=false; btn.textContent='保存する';
@@ -900,10 +925,52 @@ function updateProgress(){
 function loadTrend(){
   api('getTrend',{}).then(function(d){ renderTrend(d); })
     .catch(function(){ $('view-trend').innerHTML='<div class="card"><div class="empty">読み込めませんでした</div></div>'; });
+  /* 書いたものの読み返し。表のあとに足す */
+  api('getLog',{limit:120}).then(function(d){ renderLog(d); }).catch(function(){});
+}
+/* 日付を 11/26（水）の形にする */
+var WD_J = ['日','月','火','水','木','金','土'];
+function mmdd(iso){
+  if(!iso) return '';
+  var p=String(iso).split('-'); if(p.length<3) return String(iso);
+  var d=new Date(Number(p[0]), Number(p[1])-1, Number(p[2]));
+  return Number(p[1])+'/'+Number(p[2])+'（'+WD_J[d.getDay()]+'）';
+}
+function renderLog(d){
+  var days=(d&&d.days)||[];
+  var box=$('logbox');
+  if(!box){
+    box=document.createElement('div'); box.id='logbox';
+    $('view-trend').appendChild(box);
+  }
+  if(!days.length){
+    box.innerHTML='<div class="card"><h2>書いたことの読み返し</h2>'+
+      '<div class="empty">夜の記録を書くと、ここに溜まっていきます</div></div>';
+    return;
+  }
+  var h='<div class="card"><h2>書いたことの読み返し　<span class="muted num">'+days.length+'日分</span></h2>';
+  days.forEach(function(x){
+    h+='<div class="logday"><div class="logdate">'+esc(mmdd(x.date))+'</div>';
+    if(x.did)  h+='<div class="logrow"><span class="logk">できたこと</span><span class="logv">'+esc(x.did)+'</span></div>';
+    if(x.plan) h+='<div class="logrow"><span class="logk">明日やる</span><span class="logv">'+esc(x.plan)+'</span></div>';
+    var sub=[];
+    if(x.weight!=='' && x.weight!=null) sub.push(x.weight+'kg');
+    if(x.steps!=='' && x.steps!=null) sub.push(x.steps+'歩');
+    if(x.exercise) sub.push('運動'+x.exercise);
+    if(sub.length) h+='<div class="logsub">'+esc(sub.join('　'))+'</div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  box.innerHTML=h;
 }
 function renderTrend(d){
   var weeks=(d&&d.weeks)||[];
-  if(!weeks.length){ $('view-trend').innerHTML='<div class="card"><h2>推移</h2><div class="empty">記録が入ると、ここに出ます</div></div>'; return; }
+  var keep = $('logbox');
+  if(!weeks.length){
+    $('view-trend').innerHTML='<div class="card"><h2>推移</h2><div class="empty">記録が入ると、ここに出ます</div></div>';
+    if(keep) $('view-trend').appendChild(keep);
+    return;
+  }
   var h='<div class="card"><h2>週ごとの平均</h2><table><thead><tr>'+
     '<th>週</th><th>体重</th><th>ウエスト</th><th>歩数</th><th>体調</th></tr></thead><tbody>';
   weeks.forEach(function(w){
@@ -914,7 +981,9 @@ function renderTrend(d){
       '<td class="num">'+fmt(w.cond)+'</td></tr>';
   });
   h+='</tbody></table></div>';
+  var keep2 = $('logbox');
   $('view-trend').innerHTML=h;
+  if(keep2) $('view-trend').appendChild(keep2);
 }
 function fmt(v){ return (v==='' || v==null)?'—':v; }
 
