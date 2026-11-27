@@ -199,15 +199,20 @@
   body.wide main{max-width:1400px;}
 
   /* 宿題を組む画面。パソコンではメニューを横に並べる（縦長だと見にくい） */
-  #selList{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;
-           padding:2px 2px 10px;scroll-snap-type:x proximity;}
-  #selList > .mblock{flex:0 0 330px;scroll-snap-align:start;}
-  #selList > #btnMenuAdd{flex:0 0 150px;align-self:stretch;min-height:110px;}
+  #selList{display:flex;gap:10px;align-items:flex-start;overflow-x:auto;
+           padding:2px 2px 10px;}
+  /* 幅は画面に合わせて伸び縮みする。4つでも右端が切れない。
+     5つ以上になったら横スクロールにする */
+  #selList > .mblock{flex:1 1 0;min-width:252px;max-width:460px;}
   .mgrip{flex:0 0 auto;width:30px;height:30px;padding:0;font-size:16px;line-height:1;
          cursor:grab;touch-action:none;}
   .mblock.dragging{opacity:.6;pointer-events:none;}
   .mblock.dragging .mhead{background:var(--accent-weak);border-radius:8px;}
   .mbox{min-height:54px;}
+  /* 種目の写真。1枚だと動きが分からないので、ある分だけ小さく並べる */
+  .exshots{display:flex;gap:3px;margin:4px 0 0 34px;flex-wrap:wrap;}
+  .exshots img{width:40px;height:40px;object-fit:cover;border-radius:6px;
+               border:1px solid var(--accent);display:block;cursor:pointer;}
   /* 画面がせまいときは、今までどおり縦に積む */
   @media(max-width:860px){
     #selList{display:block;overflow-x:visible;}
@@ -1318,6 +1323,7 @@ function renderAssign(){
      '空にしておくと、うすい字で出ている全員共通の回数が出ます。セット数が1のときは出ません</div>'+
      '<button class="mini" id="btnSort" style="margin:8px 0 4px;">いま選んでいるメニューを 緩める→伸ばす→支える→鍛える の順に並べる</button>'+
      '<div id="selList"></div>'+
+     '<button class="mini" id="btnMenuAdd" style="margin-top:4px;">＋ メニューをもう1つ足す</button>'+
      '<button class="btn-save" id="btnAssign" style="margin-top:12px;">この内容で出す</button></div>';
   $('view-coach').innerHTML=h;
   renderSel();
@@ -1338,6 +1344,12 @@ function renderAssign(){
     api('coachAssign',{data:{lineId:d.lineId, setName:n}})
       .then(function(r){ toast(r.count+'種目に入れかえました'); openStudent(d.lineId); })
       .catch(function(){ toast('入れかえられませんでした'); });
+  });
+  $('btnMenuAdd').addEventListener('click',function(){
+    S.menus.push({ name:'', ids:[] });
+    S.cur=S.menus.length-1;
+    renderSel();
+    toast('メニュー'+S.menus.length+'を足しました。ここに種目を入れてください');
   });
   $('btnSort').addEventListener('click',function(){
     var m = S.menus[S.cur];
@@ -1455,7 +1467,6 @@ function renderSel(){
              (mi===S.cur?'ここに足します':'ここに足す')+'</button>':'')+
        '</div>';
   });
-  h+='<button class="mini" id="btnMenuAdd">＋ メニューをもう1つ足す</button>';
   $('selList').innerHTML=h;
   bindSel();
 }
@@ -1467,15 +1478,20 @@ function selRow(id, i, mi){
      '<div class="row-ex">'+
        '<button class="grip" data-grip="1" title="押したまま動かすと並べかえ">⠿</button>'+
        '<span class="no">'+(i+1)+'</span>';
-  if(x.photos && x.photos.length){
-    h+='<img src="'+esc(thumb(x.photos[0],160))+'" loading="lazy" decoding="async" alt="" '+
-       'data-photo="'+esc(id)+'" style="cursor:pointer;border-color:var(--accent);">';
-  }
   h+='<div class="tx">'+(x.phase?'<span class="ph-tag">'+esc(x.phase)+'</span>':'')+
      '<b>'+esc(id)+'</b>　'+esc(x.how||'')+'</div>'+
      '<button class="mini" data-del="'+esc(id)+'" data-dmi="'+mi+'">外す</button>'+
-     '</div>'+
-     '<div class="rp-row">'+
+     '</div>';
+  /* 写真は1枚だと動きが分からないので、ある分だけ小さく横に並べる */
+  if(x.photos && x.photos.length){
+    h+='<div class="exshots">';
+    x.photos.slice(0,5).forEach(function(u){
+      h+='<img src="'+esc(thumb(u,160))+'" loading="lazy" decoding="async" alt="" '+
+         'data-photo="'+esc(id)+'">';
+    });
+    h+='</div>';
+  }
+  h+='<div class="rp-row">'+
        '<input type="text" data-rp="'+esc(id)+'" value="'+esc(rp.reps||'')+'" '+
          'placeholder="'+esc(x.baseReps||'回数')+'" autocapitalize="off" spellcheck="false">'+
        '<span class="rp-x">×</span>'+
@@ -1533,14 +1549,6 @@ function bindSel(){
       renderSel();
     });
   });
-  var ma=$('btnMenuAdd');
-  if(ma) ma.addEventListener('click',function(){
-    S.menus.push({ name:'', ids:[] });
-    S.cur=S.menus.length-1;
-    renderSel();
-    toast('メニュー'+S.menus.length+'を足しました。ここに種目を入れてください');
-  });
-
   bindDrag(box);
 }
 
