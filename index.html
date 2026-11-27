@@ -176,7 +176,7 @@
   .ex{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
       padding:14px;margin-bottom:14px;}
   .ex-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
-  .ex-id{font-size:13px;font-weight:700;color:#fff;background:var(--sub);
+  .ex-id{min-width:26px;text-align:center;font-size:13px;font-weight:700;color:#fff;background:var(--sub);
          border-radius:20px;padding:3px 10px;letter-spacing:.03em;}
   .ex-id.p1{background:var(--ph1);} .ex-id.p2{background:var(--ph2);}
   .ex-id.p3{background:var(--ph3);} .ex-id.p4{background:var(--ph4);}
@@ -334,6 +334,7 @@
   .rp-row input::placeholder{color:var(--sub);opacity:.5;}      /* 全員共通の回数は、うすい字で見せる */
   .rp-row input::-webkit-input-placeholder{color:var(--sub);opacity:.5;}
   .rp-x{font-size:13px;color:var(--sub);flex:0 0 auto;}
+  .rp-lb{font-size:12px;color:var(--sub);flex:0 0 auto;}
   .row-ex .ph-tag{font-size:11px;padding:2px 7px;border-radius:999px;background:var(--accent-weak);
                   color:var(--accent);font-weight:700;margin-right:6px;white-space:nowrap;}
 
@@ -708,7 +709,10 @@ function renderRecord(diary){
       '<textarea id="rec_明日" placeholder="小さなことで大丈夫です">'+esc(diary['明日やること']||'')+'</textarea></div>';
   }
   html+='</div>';
+  /* これまで書いたぶんを下に出す。自分で見返せるように */
+  html+='<div id="recordlog"></div>';
   $('view-record').innerHTML=html;
+  loadRecordLog();
 
   CATE_KEYS.forEach(function(k){ if(inPart(k)) bindChoices('rec_'+k, diary[k]); });
   if(inPart('体調')) bindChoices('rec_体調', diary['体調']);
@@ -737,6 +741,41 @@ function renderRecord(diary){
     });
   }
 }
+/* これまで書いたぶん。今日の記録の下に、新しい順で出す */
+function loadRecordLog(){
+  var box=$('recordlog'); if(!box) return;
+  if(S.logCache){ renderRecordLog(S.logCache); return; }
+  api('getLog',{limit:60}).then(function(d){
+    S.logCache=d; renderRecordLog(d);
+  }).catch(function(){});
+}
+function renderRecordLog(d){
+  var box=$('recordlog'); if(!box) return;
+  var days=((d&&d.days)||[]).filter(function(x){ return x.date !== S.today; });
+  if(!days.length){ box.innerHTML=''; return; }
+  var open = S.logOpen ? days : days.slice(0,5);
+  var h='<div class="card"><h2>これまで書いたこと</h2>';
+  open.forEach(function(x){
+    h+='<div class="logday"><div class="logdate">'+esc(mmdd(x.date))+'</div>';
+    if(x.did)  h+='<div class="logrow"><span class="logk">できたこと</span><span class="logv">'+esc(x.did)+'</span></div>';
+    if(x.plan) h+='<div class="logrow"><span class="logk">明日やる</span><span class="logv">'+esc(x.plan)+'</span></div>';
+    var sub=[];
+    if(x.weight!=='' && x.weight!=null) sub.push(x.weight+'kg');
+    if(x.steps!=='' && x.steps!=null) sub.push(x.steps+'歩');
+    if(x.exercise) sub.push('運動 '+x.exercise);
+    if(sub.length) h+='<div class="logsub">'+esc(sub.join('　'))+'</div>';
+    h+='</div>';
+  });
+  if(days.length>5){
+    h+='<button class="mini" id="btnLogMore" style="margin-top:8px;">'+
+       (S.logOpen ? 'とじる' : 'もっと見る（ぜんぶで'+days.length+'日ぶん）')+'</button>';
+  }
+  h+='</div>';
+  box.innerHTML=h;
+  var b=$('btnLogMore');
+  if(b) b.addEventListener('click',function(){ S.logOpen=!S.logOpen; renderRecordLog(S.logCache); });
+}
+
 function bindChoices(groupId, current){
   var g=$(groupId); if(!g) return;
   Array.prototype.forEach.call(g.children,function(c){
@@ -762,6 +801,7 @@ function saveRecord(){
   if($('rec_明日')) data['明日やること']=$('rec_明日').value;
   S.dirty = false;                       /* 保存できたら、また最新で描き換えてよい */
   api('saveDaily',{data:data}).then(function(){
+    S.logCache=null;                       /* 書いたぶんを読み返しに反映させる */
     toast('保存しました'); btn.disabled=false; btn.textContent='保存する';
   }).catch(function(){
     alert2('保存できませんでした。もう一度お試しください'); btn.disabled=false; btn.textContent='保存する';
@@ -1154,7 +1194,7 @@ function renderHomework(d){
        '数字を押すと、ほかのメニューも見られます</div>';
   }
   h+='</div>';
-  list.forEach(function(x){ h+=exCard(x, today, doneToday); });
+  list.forEach(function(x, i){ h+=exCard(x, today, doneToday, i+1); });
   if(list.length){
     h+='<div class="card"><button class="btn-save" id="btnAllDone"'+(left?'':' disabled')+'>'+
        (left?('のこり '+left+'つも、できた'):'ぜんぶ できています')+'</button></div>';
@@ -1177,18 +1217,26 @@ function thumb(u, w){
   return /drive\.google\.com/.test(u) ? u.replace(/([?&]sz=)w\d+/, '$1w'+w) : u;
 }
 
-function exCard(x, today, done){
+/* 回数とセット数を、読んですぐ分かる形にする。
+ * 数字だけなら「回」「セット」を足す。「1分」「10深呼吸」はそのまま。
+ * 1セットのときはセット数を出さない（書く意味がないので） */
+function repsLabel(reps, sets){
+  var r = String(reps == null ? '' : reps).trim();
+  var t = String(sets == null ? '' : sets).trim();
+  if(r && /^[0-9]+$/.test(r)) r = r + '回';
+  if(t && /^[0-9]+$/.test(t)) t = t + 'セット';
+  if(t === '1セット' || t === '1') t = '';
+  if(r && t) return r + ' を ' + t;
+  return r || t || '';
+}
+function exCard(x, today, done, no){
   var p=PH_NO[x.phase]||0;
   var h='<div class="ex">';
-  h+='<div class="ex-top"><span class="ex-id'+(p?' p'+p:'')+'">'+esc(x.id)+'</span>';
+  h+='<div class="ex-top"><span class="ex-id'+(p?' p'+p:'')+'">'+(no||'')+'</span>';
   h+='<span class="ex-body">'+esc(x.phase||'')+(x.body?'／'+esc(x.body):'')+
      (x.sub&&x.sub.length?' <span style="opacity:.75">+'+esc(x.sub.join('・'))+'</span>':'')+'</span>';
-  /* 回数とセット数。1セットは書く意味がないので出さない。
-   * 「1分」「10深呼吸」のような文字でも、そのまま出る */
-  var r=[]; if(x.reps) r.push(x.reps);
-  var st=String(x.sets||'').trim();
-  if(st && st!=='1' && st!=='1セット') r.push(st);
-  if(r.length) h+='<span class="ex-reps">'+esc(r.join(' × '))+'</span>';
+  var rl = repsLabel(x.reps, x.sets);
+  if(rl) h+='<span class="ex-reps">'+esc(rl)+'</span>';
   h+='</div>';
   if(x.video){
     h+='<video class="exv" src="'+esc(vUrl(x.video))+'" controls playsinline preload="none"'+
@@ -1528,6 +1576,7 @@ function renderCheat(){
       var reps=rp.reps||x.baseReps||x.reps||'';
       var sets=rp.sets||x.baseSets||x.sets||'';
       var st=String(sets).trim();
+      /* ここから下は元のまま（カンペは数字だけの方が見やすい） */
       var r=[]; if(reps) r.push(reps);
       if(st && st!=='1' && st!=='1セット') r.push(st);
 
@@ -1616,11 +1665,12 @@ function selRow(id, i, mi){
     h+='</div>';
   }
   h+='<div class="rp-row">'+
+       '<span class="rp-lb">回数</span>'+
        '<input type="text" data-rp="'+esc(id)+'" value="'+esc(rp.reps||'')+'" '+
-         'placeholder="'+esc(x.baseReps||'回数')+'" autocapitalize="off" spellcheck="false">'+
-       '<span class="rp-x">×</span>'+
+         'placeholder="'+esc(x.baseReps||'みんなの回数')+'" autocapitalize="off" spellcheck="false">'+
+       '<span class="rp-lb">セット</span>'+
        '<input type="text" class="rp-s" data-rs="'+esc(id)+'" value="'+esc(rp.sets||'')+'" '+
-         'placeholder="'+esc(x.baseSets||'セット')+'" autocapitalize="off" spellcheck="false">'+
+         'placeholder="'+esc(x.baseSets||'1')+'" autocapitalize="off" spellcheck="false">'+
      '</div>'+
      '<div class="phbox" id="phedit-'+esc(id)+'"></div>'+
      '</div>';
