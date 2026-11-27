@@ -401,11 +401,22 @@ var S = { idToken:null, name:'', today:'', shootDates:[], round:1, karte:null };
 /* ================= サーバー通信 ================= */
 function api(action, payload){
   var body = Object.assign({ action:action, idToken:S.idToken }, payload || {});
-  return fetch(CONFIG.GAS_URL, {
+  /* 返ってこないまま待ち続けると、ぐるぐるが止まらない。25秒で打ち切る */
+  var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+  var killer = setTimeout(function(){ if(ctl) ctl.abort(); }, 25000);
+  var opt = {
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},  // プリフライトを避ける
     body: JSON.stringify(body)
-  }).then(function(r){ return r.json(); }).then(function(res){
+  };
+  if(ctl) opt.signal = ctl.signal;
+  return fetch(CONFIG.GAS_URL, opt).then(function(r){
+    clearTimeout(killer);
+    return r.json();
+  }, function(e){
+    clearTimeout(killer);
+    throw new Error('つながりませんでした');
+  }).then(function(res){
     if(res && res.ms) S.lastMs = res.ms;          /* どこで待ったかの内訳 */
     if(!res.ok) throw new Error(res.error || 'server error');
     return res.data;
@@ -455,6 +466,18 @@ function showView(name){
  * 立ち上がりは GAS の準備とシートを開く時間で数秒かかるので、
  * 「待たせない」はここで作る */
 var BOOT_KEY = 'bm_boot_v1';
+/* 手元に残した控えの形を変えたときは、古いものを捨てる。
+   中途半端な控えが残っていると、開いたときに止まってしまうため */
+(function cleanOldCache(){
+  try{
+    if(localStorage.getItem('bm_cache_ver') !== '3'){
+      var keep = {};
+      localStorage.clear();
+      localStorage.setItem('bm_cache_ver', '3');
+    }
+  }catch(e){}
+})();
+
 function bootCacheRead(){
   try{
     var s = localStorage.getItem(BOOT_KEY);
@@ -492,10 +515,11 @@ function applyBoot(d){
     S.tabsReady=true;
     setupTabs();
     var lv = lastView();
-    if(lv && lv.v==='coach' && S.isCoach){
-      loadCoach();
+    /* 本人確認が終わってからでないと通信できないので、コーチ画面は少し待って開く */
+    if(lv && lv.v==='coach' && S.isCoach && S.idToken){
       if(lv.s) S.wantStudent = lv.s;        /* 受講生の画面まで戻す */
       showView('coach');
+      loadCoach();
     }else if(lv && ['record','homework','photo','trend','karte'].indexOf(lv.v)>=0){
       if(lv.v==='photo') loadPhotos(S.round);
       if(lv.v==='homework') loadHomework();
@@ -1263,17 +1287,14 @@ function coachCacheWrite(d){
   try{ localStorage.setItem('bm_coach', JSON.stringify(d)); }catch(e){}
 }
 function loadCoach(){
-  /* 前に見た一覧をすぐ出す。待たせないため。届いたら中身を入れ替える */
-  var c = coachCacheRead();
-  if(c && c.students){ S.coach=c; renderCoachHome(); }
-  else $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
+  $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
   api('coachHome',{}).then(function(d){
-    S.coach=d; coachCacheWrite(d);
-    /* 受講生の画面を開いている最中なら、一覧で描き直さない */
+    S.coach=d;
+    /* 受講生の画面へ戻るところだったら、一覧を出さずにその人を開く */
     if(S.wantStudent){ var w=S.wantStudent; S.wantStudent=null; openStudent(w); return; }
-    if(S.view==='coach' && !S.target) renderCoachHome();
+    renderCoachHome();
   }).catch(function(e){
-    if(!c) $('view-coach').innerHTML='<div class="empty">'+esc(String(e.message||e))+'</div>';
+    $('view-coach').innerHTML='<div class="empty">'+esc(String(e.message||e))+'</div>';
   });
 }
 
@@ -1334,7 +1355,7 @@ function stuCacheRead(id){
 function stuCacheWrite(id, d){
   try{ localStorage.setItem('bm_stu_'+id, JSON.stringify(d)); }catch(e){}
 }
-function applyStudent(d, fromCache){
+function applyStudent(d){
   S.target=d; S.selInfo={};
   d.items.forEach(function(x){ S.selInfo[x.id]=x; });
   S.menus = (d.menus && d.menus.length)
@@ -1346,18 +1367,11 @@ function applyStudent(d, fromCache){
   rememberView('coach', d.lineId);
 }
 function openStudent(lineId){
-  /* 前に開いた中身があれば先に出す。通信が終わったら入れ替える */
-  var c = stuCacheRead(lineId);
-  if(c && c.items){ S.cur=0; applyStudent(c, true); }
-  else $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
+  $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
+  S.cur = 0;
   api('coachOpen',{data:{lineId:lineId}}).then(function(d){
-    stuCacheWrite(lineId, d);
-    /* 前に出した中身と同じなら描き直さない。打ちかけの数字を消さないため */
-    if(c && JSON.stringify(c.menus)===JSON.stringify(d.menus)
-         && JSON.stringify(c.reps)===JSON.stringify(d.reps)) return;
-    applyStudent(d, false);
-  }).catch(function(){ if(!c){ toast('開けませんでした'); renderCoachHome(); } });
-  return;
+    applyStudent(d);
+  }).catch(function(){ toast('開けませんでした'); renderCoachHome(); });
 }
 function openStudentOld(lineId){
   $('view-coach').innerHTML='<div class="empty">読み込んでいます…</div>';
