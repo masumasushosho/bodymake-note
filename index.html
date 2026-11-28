@@ -408,7 +408,18 @@ var CONFIG = {
 var S = { idToken:null, name:'', today:'', shootDates:[], round:1, karte:null };
 
 /* ================= サーバー通信 ================= */
-function api(action, payload){
+/* LINEの合い言葉（IDトークン）は時間が経つと切れる。
+   切れたまま送ると id token verify failed で弾かれるので、取り直して送り直す */
+function freshToken(){
+  try{
+    if(window.liff && liff.isLoggedIn()){
+      var t = liff.getIDToken();
+      if(t) S.idToken = t;
+    }
+  }catch(e){}
+  return S.idToken;
+}
+function api(action, payload, retried){
   var body = Object.assign({ action:action, idToken:S.idToken }, payload || {});
   /* 返ってこないまま待ち続けると、ぐるぐるが止まらない。25秒で打ち切る */
   var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
@@ -427,7 +438,18 @@ function api(action, payload){
     throw new Error('つながりませんでした');
   }).then(function(res){
     if(res && res.ms) S.lastMs = res.ms;          /* どこで待ったかの内訳 */
-    if(!res.ok) throw new Error(res.error || 'server error');
+    if(!res.ok){
+      var msg = String((res && res.error) || 'server error');
+      /* 合い言葉が切れていたら、取り直して1回だけ送り直す */
+      if(!retried && /id token/i.test(msg)){
+        var before = S.idToken;
+        if(freshToken() && S.idToken !== before) return api(action, payload, true);
+        /* 取り直せないときは、入り直してもらう */
+        try{ if(window.liff && liff.login) { liff.login(); return new Promise(function(){}); } }catch(e){}
+        throw new Error('LINEの確認が切れました。いったん閉じて、もう一度開いてください');
+      }
+      throw new Error(msg);
+    }
     return res.data;
   });
 }
@@ -540,6 +562,11 @@ function applyBoot(d){
     }
   }
 }
+
+/* 別のアプリから戻ってきたときに、合い言葉を取り直しておく */
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'visible') freshToken();
+});
 
 function boot(){
   var t0 = Date.now();
