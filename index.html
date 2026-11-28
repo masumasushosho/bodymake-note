@@ -412,7 +412,7 @@ function api(action, payload){
   var body = Object.assign({ action:action, idToken:S.idToken }, payload || {});
   /* 返ってこないまま待ち続けると、ぐるぐるが止まらない。25秒で打ち切る */
   var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
-  var killer = setTimeout(function(){ if(ctl) ctl.abort(); }, 25000);
+  var killer = setTimeout(function(){ if(ctl) ctl.abort(); }, 45000);
   var opt = {
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},  // プリフライトを避ける
@@ -1057,10 +1057,17 @@ function updateProgress(){
  * 画面4：推移
  * ============================================================ */
 function loadTrend(){
-  api('getTrend',{}).then(function(d){ renderTrend(d); })
-    .catch(function(){ $('view-trend').innerHTML='<div class="card"><div class="empty">読み込めませんでした</div></div>'; });
-  /* 書いたものの読み返し。表のあとに足す */
-  api('getLog',{limit:120}).then(function(d){ renderLog(d); }).catch(function(){});
+  /* 2つ同時に投げると待ち時間が重なるので、順番に取る */
+  api('getTrend',{}).then(function(d){
+    renderTrend(d);
+    if(S.logCache){ renderLog(S.logCache); return null; }
+    return api('getLog',{limit:120});
+  }).then(function(d){
+    if(d){ S.logCache=d; renderLog(d); }
+  }).catch(function(e){
+    $('view-trend').innerHTML='<div class="card"><div class="empty">読み込めませんでした<br>'+
+      '<span style="font-size:12px;opacity:.8">'+esc(String(e.message||e))+'</span></div></div>';
+  });
 }
 /* 日付を 11/26（水）の形にする */
 var WD_J = ['日','月','火','水','木','金','土'];
